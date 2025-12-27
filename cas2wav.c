@@ -13,8 +13,16 @@ int main() {
 
     // Get file size
     fseek(fp, 0, SEEK_END);
-    long file_size = ftell(fp);
+    long file_size_long = ftell(fp);
     fseek(fp, 0, SEEK_SET);
+    
+    if (file_size_long < 0) {
+        perror("Error getting file size");
+        fclose(fp);
+        return 1;
+    }
+    
+    size_t file_size = (size_t)file_size_long;
 
     // Read entire file into memory
     uint8_t *data = malloc(file_size);

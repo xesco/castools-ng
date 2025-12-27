@@ -8,7 +8,6 @@ const uint8_t FILETYPE_BINARY[10] = {0xD0, 0xD0, 0xD0, 0xD0, 0xD0, 0xD0, 0xD0, 0
 const uint8_t FILETYPE_BASIC[10]  = {0xD3, 0xD3, 0xD3, 0xD3, 0xD3, 0xD3, 0xD3, 0xD3, 0xD3, 0xD3};
 
 bool nextCasHeader(uint8_t *data, size_t *pos, size_t length) {
-    // Check if there's a CAS_HEADER at the current position
     if (*pos + sizeof(CAS_HEADER) <= length) {
         if (memcmp(data + *pos, CAS_HEADER, sizeof(CAS_HEADER)) == 0) {
             return true;
@@ -64,17 +63,19 @@ bool isBasicFile(uint8_t *file_type) {
 bool readPaddingBytes(uint8_t *data, size_t *pos, cas_DataBlock *block, size_t length) {
     // CAS blocks are padded so next CAS header starts at an 8-byte file offset
     // When already at an 8-byte boundary, pad to the NEXT boundary (add 8 bytes)
+    
+    // Check if we're at end of file
+    if (*pos >= length) {
+        block->padding = NULL;
+        return true;
+    }
+    
     size_t remainder = *pos % 8;
     size_t padding_size = (remainder != 0) ? (8 - remainder) : 8;
     
     // Limit padding to available bytes
     if (*pos + padding_size > length) {
         padding_size = length - *pos;
-    }
-    
-    if (padding_size == 0) {
-        block->padding = NULL;
-        return true;
     }
     
     // Allocate and copy padding bytes
@@ -103,12 +104,14 @@ bool readDataBlockHeader(uint8_t *data, size_t *pos, cas_DataBlockHeader *data_b
 
 bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) {
     size_t block_count = 0;
-    size_t capacity = 10; // Initial capacity
+    size_t capacity = 5;
+    size_t total_data_size = 0;
     bool eof_found = false;
     
     // Allocate initial array for data blocks
-    file->data_blocks = malloc(capacity * sizeof(cas_DataBlock));
+    file->data_blocks = allocateArray(capacity, sizeof(cas_DataBlock));
     if (!file->data_blocks) {
+        fprintf(stderr, "Failed to allocate memory for ASCII data blocks\n");
         return false;
     }
     
@@ -118,57 +121,74 @@ bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) {
         if (!nextCasHeader(data, pos, length)) {
             break; // No more blocks
         }
-        
+
         // Check if we need to resize the array
         if (block_count >= capacity) {
-            capacity *= 2;
-            cas_DataBlock *new_blocks = realloc(file->data_blocks, capacity * sizeof(cas_DataBlock));
-            if (!new_blocks) {
-                free(file->data_blocks);
+            if (!expandArray((void**)&file->data_blocks, &capacity, sizeof(cas_DataBlock))) {
+                fprintf(stderr, "Failed to expand memory for ASCII data blocks\n");
                 return false;
             }
-            file->data_blocks = new_blocks;
         }
         
         // Read the CAS header
         if (!readCasHeader(data, pos, &file->data_blocks[block_count].header, length)) {
             free(file->data_blocks);
+            fprintf(stderr, "Failed to read CAS header for ASCII data block\n");
             return false;
         }
         
-        // ASCII data blocks are 256 bytes
-        const size_t ASCII_BLOCK_SIZE = 256;
-        size_t data_size = ASCII_BLOCK_SIZE;
+        // Find the size of this data block by searching for next header
+        size_t block_start = *pos;
+        size_t block_end = length;
         
-        // Check if we have enough data for a full block
-        if (*pos + data_size > length) {
-            data_size = length - *pos; // Read what's available
-        }
-        
-        // Check for EOF marker (0x1A) within the block
-        for (size_t i = 0; i < data_size; i++) {
-            if (data[*pos + i] == 0x1A) {
-                eof_found = true;
+        // Look for next CAS header to determine block boundary
+        for (size_t i = block_start; i + 8 <= length; i += 8) {
+            if (nextCasHeader(data, &i, length)) {
+                block_end = i;
                 break;
             }
         }
+        size_t block_size = block_end - block_start;
         
-        // Allocate and store the full 256-byte data block
+        // Find EOF marker (0x1A) to separate data from padding
+        uint8_t *eof_ptr = memchr(data + *pos, 0x1A, block_size);
+        size_t data_size = eof_ptr ? (size_t)(eof_ptr - (data + *pos)) : block_size;
+        
+        if (eof_ptr) {
+            eof_found = true;
+        }
+        
+        // Allocate and copy data (excluding EOF marker)
         file->data_blocks[block_count].data = malloc(data_size);
         if (!file->data_blocks[block_count].data) {
             free(file->data_blocks);
+            fprintf(stderr, "Failed to allocate memory for ASCII data block data\n");
             return false;
         }
         memcpy(file->data_blocks[block_count].data, data + *pos, data_size);
-        *pos += data_size;
+        total_data_size += data_size;
         
-        // No padding needed - 8 + 256 = 264 bytes is already 8-byte aligned
-        file->data_blocks[block_count].padding = NULL;
+        // Allocate and copy padding (EOF marker and everything after)
+        size_t padding_size = block_size - data_size;
+        if (padding_size > 0) {
+            file->data_blocks[block_count].padding = malloc(padding_size);
+            if (!file->data_blocks[block_count].padding) {
+                free(file->data_blocks[block_count].data);
+                free(file->data_blocks);
+                fprintf(stderr, "Failed to allocate memory for ASCII data block padding\n");
+                return false;
+            }
+            memcpy(file->data_blocks[block_count].padding, data + *pos + data_size, padding_size);
+        } else {
+            file->data_blocks[block_count].padding = NULL;
+        }
+        
+        *pos += block_size;
         block_count++;
     }
     
-    // Calculate total data size (256 bytes per block)
-    file->data_size = block_count * 256;
+    // Store total data size summed from actual blocks
+    file->data_size = total_data_size;
     file->data_block_count = block_count;
     return eof_found; // Return true only if we found EOF marker
 }
@@ -269,16 +289,25 @@ bool parseCustomFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) 
     return true;
 }
 
-bool expandFilesArray(cas_Container *container, size_t *capacity) {
+bool expandArray(void **array, size_t *capacity, size_t item_size) {
     *capacity *= 2;
-    cas_File *new_files = realloc(container->files, (*capacity) * sizeof(cas_File));
-    if (!new_files) {
-        fprintf(stderr, "Failed to reallocate memory for files array\n");
-        free(container->files);
+    void *new_array = realloc(*array, (*capacity) * item_size);
+    if (!new_array) {
+        fprintf(stderr, "Failed to reallocate memory for array\n");
+        free(*array);
+        *array = NULL;
         return false;
     }
-    container->files = new_files;
+    *array = new_array;
     return true;
+}
+
+void* allocateArray(size_t capacity, size_t item_size) {
+    void *array = malloc(capacity * item_size);
+    if (!array) {
+        fprintf(stderr, "Failed to allocate memory for array\n");
+    }
+    return array;
 }
 
 bool parseFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) {
@@ -330,13 +359,12 @@ bool parseFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) {
 
 bool parseCasContainer(uint8_t *data, cas_Container *container, size_t length) {
     size_t pos = 0;
-    size_t capacity = 10;
+    size_t capacity = 5;
     container->file_count = 0;
     
     // Allocate initial array for files
-    container->files = malloc(capacity*sizeof(cas_File));
+    container->files = allocateArray(capacity, sizeof(cas_File));
     if (!container->files) {
-        fprintf(stderr, "Failed to allocate memory for files array\n");
         return false;
     }
     
@@ -344,7 +372,7 @@ bool parseCasContainer(uint8_t *data, cas_Container *container, size_t length) {
     while (nextCasHeader(data, &pos, length)) {
         // Check if we need to resize the array
         if (container->file_count >= capacity) {
-            if (!expandFilesArray(container, &capacity)) {
+            if (!expandArray((void**)&container->files, &capacity, sizeof(cas_File))) {
                 return false;
             }
         }

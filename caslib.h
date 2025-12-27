@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define ASCII_BLOCK_SIZE 256
+
 extern const uint8_t CAS_HEADER[8];
 extern const uint8_t FILETYPE_ASCII[10];
 extern const uint8_t FILETYPE_BINARY[10];
@@ -60,7 +62,8 @@ bool readDataBlockHeader(uint8_t *data, size_t *pos, cas_DataBlockHeader *data_b
 bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t length);
 bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t length);
 bool parseCustomFile(uint8_t *data, cas_File *file, size_t *pos, size_t length);
-bool expandFilesArray(cas_Container *container, size_t *capacity);
+bool expandArray(void **array, size_t *capacity, size_t item_size);
+void* allocateArray(size_t capacity, size_t item_size);
 bool parseFile(uint8_t *data, cas_File *file, size_t *pos, size_t length);
 bool parseCasContainer(uint8_t *data, cas_Container *container, size_t length);
 
