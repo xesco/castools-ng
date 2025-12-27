@@ -24,7 +24,9 @@ typedef struct {
 typedef struct {
     cas_Header header;
     uint8_t* data;
+    size_t data_size;
     uint8_t* padding;
+    size_t padding_size;
 } cas_DataBlock;
 
 typedef struct {
@@ -57,7 +59,6 @@ bool compareFileType(uint8_t *file_type, const uint8_t *type_pattern);
 bool isAsciiFile(uint8_t *file_type);
 bool isBinaryFile(uint8_t *file_type);
 bool isBasicFile(uint8_t *file_type);
-bool read8ByteAlignmentPadding(uint8_t *data, size_t *pos, cas_DataBlock *block, size_t length);
 bool readDataBlockHeader(uint8_t *data, size_t *pos, cas_DataBlockHeader *data_block_header, size_t length);
 bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t length);
 bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t length);
