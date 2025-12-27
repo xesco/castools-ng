@@ -60,7 +60,7 @@ bool isBasicFile(uint8_t *file_type) {
     return compareFileType(file_type, FILETYPE_BASIC);
 }
 
-bool readPaddingBytes(uint8_t *data, size_t *pos, cas_DataBlock *block, size_t length) {
+bool read8ByteAlignmentPadding(uint8_t *data, size_t *pos, cas_DataBlock *block, size_t length) {
     // CAS blocks are padded so next CAS header starts at an 8-byte file offset
     // When already at an 8-byte boundary, pad to the NEXT boundary (add 8 bytes)
     
@@ -197,18 +197,21 @@ bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) 
     // Allocate one data block (binary/basic files only have one block of data)
     file->data_blocks = malloc(sizeof(cas_DataBlock));
     if (!file->data_blocks) {
+        fprintf(stderr, "Failed to allocate memory for binary data block\n");
         return false;
     }
     
     // Find the second CAS header (for the data block)
     if (!nextCasHeader(data, pos, length)) {
         free(file->data_blocks);
+        fprintf(stderr, "Failed to find second CAS header for binary data block\n");
         return false;
     }
     
     // Read the CAS header into the data block struct
     if (!readCasHeader(data, pos, &file->data_blocks[0].header, length)) {
         free(file->data_blocks);
+        fprintf(stderr, "Failed to read CAS header for binary data block\n");
         return false;
     }
     
@@ -218,6 +221,7 @@ bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) 
     // Read the data block header (little endian - load/end/exec addresses)
     if (!readDataBlockHeader(data, pos, &file->data_block_header, length)) {
         free(file->data_blocks);
+        fprintf(stderr, "Failed to read data block header for binary data block\n");
         return false;
     }
     
@@ -227,6 +231,7 @@ bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) 
     // Check if we have enough data
     if (*pos + data_size > length) {
         free(file->data_blocks);
+        fprintf(stderr, "Not enough data for binary data block\n");
         return false;
     }
     
@@ -234,15 +239,17 @@ bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) 
     file->data_blocks[0].data = malloc(data_size);
     if (!file->data_blocks[0].data) {
         free(file->data_blocks);
+        fprintf(stderr, "Failed to allocate memory for binary data block data\n");
         return false;
     }
     memcpy(file->data_blocks[0].data, data + *pos, data_size);
     *pos += data_size;
     
     // Read the padding bytes
-    if (!readPaddingBytes(data, pos, file->data_blocks, length)) {
+    if (!read8ByteAlignmentPadding(data, pos, file->data_blocks, length)) {
         free(file->data_blocks[0].data);
         free(file->data_blocks);
+        fprintf(stderr, "Failed to read padding bytes for binary data block\n");
         return false;
     }
     
@@ -365,6 +372,7 @@ bool parseCasContainer(uint8_t *data, cas_Container *container, size_t length) {
     // Allocate initial array for files
     container->files = allocateArray(capacity, sizeof(cas_File));
     if (!container->files) {
+        fprintf(stderr, "Failed to allocate memory for CAS container files\n");
         return false;
     }
     
