@@ -1,5 +1,5 @@
-#ifndef LIST_H
-#define LIST_H
+#ifndef COMMANDS_H
+#define COMMANDS_H
 
 #include <stdbool.h>
 

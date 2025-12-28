@@ -137,21 +137,23 @@ void printCompactContainer(const cas_Container *container) {
     for (size_t i = 0; i < container->file_count; i++) {
         const cas_File *file = &container->files[i];
         
-        printf("%2zu. %-6s ", i + 1, getFileTypeString(file));
+        printf("%2zu. | %-6s | ", i + 1, getFileTypeString(file));
         if (!file->is_custom) {
-            printf("%-6.6s ", (char*)file->file_header.file_name);
+            printf("%-6.6s | ", (char*)file->file_header.file_name);
         } else {
-            printf("       ");
+            printf("       | ");
         }
         
         printf("%6zu bytes", file->data_size);
         
         // Print addresses for binary/basic files
         if (has_addresses(file)) {
-            printf("  [0x%04x,0x%04x]:0x%04x",
+            printf(" | [0x%04x,0x%04x]:0x%04x",
                    file->data_block_header.load_address,
                    file->data_block_header.end_address,
                    file->data_block_header.exec_address);
+        } else {
+            printf(" |");
         }
         printf("\n");
     }

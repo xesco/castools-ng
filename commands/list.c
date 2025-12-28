@@ -1,9 +1,9 @@
-#include "list.h"
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "../lib/caslib.h"
 #include "../lib/printlib.h"
 #include "../lib/cmdlib.h"
-#include <stdio.h>
-#include <stdlib.h>
 
 int execute_list(const char *input_file, bool extended, bool verbose) {
     if (verbose) {

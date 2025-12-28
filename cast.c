@@ -3,7 +3,7 @@
 #include <string.h>
 #include <getopt.h>
 #include <stdbool.h>
-#include "commands/list.h"
+#include "commands/commands.h"
 
 // Forward declarations for command handlers
 static int cmd_list(int argc, char *argv[]);
