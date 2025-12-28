@@ -73,6 +73,20 @@ bool readDataBlockHeader(uint8_t *data, size_t *pos, cas_DataBlockHeader *data_b
     return true;
 }
 
+size_t findNextCasHeader(uint8_t *data, size_t start_pos, size_t length) {
+    // Round up to next 8-byte boundary for efficiency
+    // CAS headers are always at 8-byte aligned positions
+    size_t aligned_pos = (start_pos + 7) & ~7;
+
+    // Search for next CAS header at 8-byte boundaries
+    for (size_t i = aligned_pos; i + 8 <= length; i += 8) {
+        if (nextCasHeader(data, &i, length)) {
+            return i;
+        }
+    }
+    return length; // No header found, return end of data
+}
+
 bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) {
     size_t block_count = 0;
     size_t capacity = 5;
@@ -110,15 +124,7 @@ bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) {
 
         // Find the size of this data block by searching for next header
         size_t block_start = *pos;
-        size_t block_end = length;
-
-        // Look for next CAS header to determine block boundary
-        for (size_t i = block_start; i + 8 <= length; i += 8) {
-            if (nextCasHeader(data, &i, length)) {
-                block_end = i;
-                break;
-            }
-        }
+        size_t block_end = findNextCasHeader(data, block_start, length);
         size_t block_size = block_end - block_start;
 
         // Find EOF marker (0x1A) to separate data from padding
@@ -218,14 +224,7 @@ bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) 
     *pos += data_size;
 
     // Find next CAS header to determine actual padding
-    size_t next_header_pos = length;
-    for (size_t i = *pos; i + 8 <= length; i++) {
-        size_t check_pos = i;
-        if (nextCasHeader(data, &check_pos, length)) {
-            next_header_pos = i;
-            break;
-        }
-    }
+    size_t next_header_pos = findNextCasHeader(data, *pos, length);
 
     // Calculate actual padding size (bytes between end of data and next header)
     size_t padding_size = next_header_pos - *pos;
@@ -257,13 +256,7 @@ bool parseCustomFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) 
     size_t start_pos = *pos;
 
     // Find next CAS_HEADER or end of file
-    size_t next_header_pos = length;
-    for (size_t i = *pos; i + 8 <= length; i += 8) {
-        if (nextCasHeader(data, &i, length)) {
-            next_header_pos = i;
-            break;
-        }
-    }
+    size_t next_header_pos = findNextCasHeader(data, *pos, length);
     file->data_size = next_header_pos - start_pos;
 
     // Allocate one data block to store the custom data

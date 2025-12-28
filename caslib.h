@@ -60,6 +60,7 @@ bool isAsciiFile(uint8_t *file_type);
 bool isBinaryFile(uint8_t *file_type);
 bool isBasicFile(uint8_t *file_type);
 bool readDataBlockHeader(uint8_t *data, size_t *pos, cas_DataBlockHeader *data_block_header, size_t length);
+size_t findNextCasHeader(uint8_t *data, size_t start_pos, size_t length);
 bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t length);
 bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t length);
 bool parseCustomFile(uint8_t *data, cas_File *file, size_t *pos, size_t length);
