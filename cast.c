@@ -8,7 +8,7 @@
 // Forward declarations for command handlers
 static int cmd_list(int argc, char *argv[]);
 static int cmd_info(int argc, char *argv[]);
-static int cmd_extract(int argc, char *argv[]);
+static int cmd_export(int argc, char *argv[]);
 
 // Command structure
 typedef struct {
@@ -21,7 +21,7 @@ typedef struct {
 static const Command commands[] = {
     {"list", cmd_list, "List files in a CAS container"},
     {"info", cmd_info, "Show container statistics"},
-    {"extract", cmd_extract, "Extract file(s) from container"},
+    {"export", cmd_export, "Export file(s) from container"},
     {NULL, NULL, NULL}
 };
 
@@ -32,6 +32,35 @@ static void print_usage(const char *prog_name) {
         printf("  %-12s %s\n", cmd->name, cmd->description);
     }
     printf("\nUse '%s <command> --help' for more information on a command.\n", prog_name);
+}
+
+static void print_list_help(void) {
+    printf("Usage: cast list <file.cas> [options]\n\n");
+    printf("Options:\n");
+    printf("  -e, --extended      Show extended information (sizes, headers, data, etc..)\n");
+    printf("  -i, --index <num>   Show only specific file by index (1-based, requires -e/--extended)\n");
+    printf("  -v, --verbose       Verbose output\n");
+    printf("  -h, --help          Show this help message\n");
+}
+
+static void print_info_help(void) {
+    printf("Usage: cast info <file.cas> [options]\n\n");
+    printf("Options:\n");
+    printf("  -v, --verbose     Verbose output\n");
+    printf("  -h, --help        Show this help message\n");
+}
+
+static void print_export_help(void) {
+    printf("Usage: cast export <file.cas> [options]\n\n");
+    printf("Export files from a CAS container.\n");
+    printf("By default, exports all files with auto-generated names.\n\n");
+    printf("Options:\n");
+    printf("  -i, --index <num>   Export only specific file by index (1-based)\n");
+    printf("  -d, --dir <dir>     Output directory (default: current directory)\n");
+    printf("  -D, --disk-format   Add MSX-DOS disk format headers (0xFE/0xFF prefix)\n");
+    printf("  -f, --force         Overwrite existing files\n");
+    printf("  -v, --verbose       Verbose output\n");
+    printf("  -h, --help          Show this help message\n");
 }
 
 static int cmd_list(int argc, char *argv[]) {
@@ -62,12 +91,7 @@ static int cmd_list(int argc, char *argv[]) {
                 verbose = true;
                 break;
             case 'h':
-                printf("Usage: cast list <file.cas> [options]\n\n");
-                printf("Options:\n");
-                printf("  -e, --extended      Show extended information (sizes, headers, data, etc..)\n");
-                printf("  -i, --index <num>   Show only specific file by index (1-based, requires -e/--extended)\n");
-                printf("  -v, --verbose       Verbose output\n");
-                printf("  -h, --help          Show this help message\n");
+                print_list_help();
                 return 0;
             default:
                 return 1;
@@ -75,9 +99,8 @@ static int cmd_list(int argc, char *argv[]) {
     }
     
     if (optind >= argc) {
-        fprintf(stderr, "Error: Missing required argument <file.cas>\n");
-        fprintf(stderr, "Usage: cast list <file.cas> [options]\n");
-        return 1;
+        print_list_help();
+        return 0;
     }
     
     input_file = argv[optind];
@@ -110,10 +133,7 @@ static int cmd_info(int argc, char *argv[]) {
                 verbose = true;
                 break;
             case 'h':
-                printf("Usage: cast info <file.cas> [options]\n\n");
-                printf("Options:\n");
-                printf("  -v, --verbose     Verbose output\n");
-                printf("  -h, --help        Show this help message\n");
+                print_info_help();
                 return 0;
             default:
                 return 1;
@@ -121,9 +141,8 @@ static int cmd_info(int argc, char *argv[]) {
     }
     
     if (optind >= argc) {
-        fprintf(stderr, "Error: Missing required argument <file.cas>\n");
-        fprintf(stderr, "Usage: cast info <file.cas> [options]\n");
-        return 1;
+        print_info_help();
+        return 0;
     }
     
     input_file = argv[optind];
@@ -139,22 +158,18 @@ static int cmd_info(int argc, char *argv[]) {
     return 0;
 }
 
-static int cmd_extract(int argc, char *argv[]) {
+static int cmd_export(int argc, char *argv[]) {
     const char *input_file = NULL;
-    const char *file_name = NULL;
-    const char *output_file = NULL;
     const char *output_dir = NULL;
     int index = -1;
-    bool extract_all = false;
     bool force = false;
     bool verbose = false;
+    bool disk_format = false;
     
     struct option long_options[] = {
-        {"name", required_argument, 0, 'n'},
         {"index", required_argument, 0, 'i'},
-        {"output", required_argument, 0, 'o'},
         {"dir", required_argument, 0, 'd'},
-        {"all", no_argument, 0, 'a'},
+        {"disk-format", no_argument, 0, 'D'},
         {"force", no_argument, 0, 'f'},
         {"verbose", no_argument, 0, 'v'},
         {"help", no_argument, 0, 'h'},
@@ -163,22 +178,16 @@ static int cmd_extract(int argc, char *argv[]) {
     
     int opt;
     optind = 1;
-    while ((opt = getopt_long(argc, argv, "n:i:o:d:afvh", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "i:d:Dfvh", long_options, NULL)) != -1) {
         switch (opt) {
-            case 'n':
-                file_name = optarg;
-                break;
             case 'i':
                 index = atoi(optarg);
-                break;
-            case 'o':
-                output_file = optarg;
                 break;
             case 'd':
                 output_dir = optarg;
                 break;
-            case 'a':
-                extract_all = true;
+            case 'D':
+                disk_format = true;
                 break;
             case 'f':
                 force = true;
@@ -187,16 +196,7 @@ static int cmd_extract(int argc, char *argv[]) {
                 verbose = true;
                 break;
             case 'h':
-                printf("Usage: cast extract <file.cas> [options]\n\n");
-                printf("Options:\n");
-                printf("  -n, --name <name>   Extract file by name\n");
-                printf("  -i, --index <num>   Extract file by index (0-based)\n");
-                printf("  -o, --output <file> Output filename\n");
-                printf("  -d, --dir <dir>     Output directory (for --all)\n");
-                printf("  -a, --all           Extract all files\n");
-                printf("  -f, --force         Overwrite existing files\n");
-                printf("  -v, --verbose       Verbose output\n");
-                printf("  -h, --help          Show this help message\n");
+                print_export_help();
                 return 0;
             default:
                 return 1;
@@ -204,34 +204,14 @@ static int cmd_extract(int argc, char *argv[]) {
     }
     
     if (optind >= argc) {
-        fprintf(stderr, "Error: Missing required argument <file.cas>\n");
-        fprintf(stderr, "Usage: cast extract <file.cas> [options]\n");
-        return 1;
+        print_export_help();
+        return 0;
     }
     
     input_file = argv[optind];
     
-    // Validate options
-    if (!extract_all && !file_name && index < 0) {
-        fprintf(stderr, "Error: Must specify --name, --index, or --all\n");
-        return 1;
-    }
-    
-    // Print parsed options (boilerplate)
-    printf("Command: extract\n");
-    printf("  Input file: %s\n", input_file);
-    if (file_name) printf("  File name: %s\n", file_name);
-    if (index >= 0) printf("  File index: %d\n", index);
-    if (output_file) printf("  Output file: %s\n", output_file);
-    if (output_dir) printf("  Output directory: %s\n", output_dir);
-    printf("  Extract all: %s\n", extract_all ? "yes" : "no");
-    printf("  Force: %s\n", force ? "yes" : "no");
-    printf("  Verbose: %s\n", verbose ? "yes" : "no");
-    
-    // TODO: Implement actual extract functionality
-    printf("\n[TODO: Extract from %s]\n", input_file);
-    
-    return 0;
+    // Call the execute_export implementation
+    return execute_export(input_file, index, output_dir, force, verbose, disk_format);
 }
 
 int main(int argc, char *argv[]) {
