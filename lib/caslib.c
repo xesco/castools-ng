@@ -44,19 +44,19 @@ bool peekFileType(uint8_t *data, size_t pos, uint8_t *file_type, size_t length) 
     return true;
 }
 
-bool compareFileType(uint8_t *file_type, const uint8_t *type_pattern) {
+bool compareFileType(const uint8_t *file_type, const uint8_t *type_pattern) {
     return memcmp(file_type, type_pattern, 10) == 0;
 }
 
-bool isAsciiFile(uint8_t *file_type) {
+bool isAsciiFile(const uint8_t *file_type) {
     return compareFileType(file_type, FILETYPE_ASCII);
 }
 
-bool isBinaryFile(uint8_t *file_type) {
+bool isBinaryFile(const uint8_t *file_type) {
     return compareFileType(file_type, FILETYPE_BINARY);
 }
 
-bool isBasicFile(uint8_t *file_type) {
+bool isBasicFile(const uint8_t *file_type) {
     return compareFileType(file_type, FILETYPE_BASIC);
 }
 
@@ -195,6 +195,7 @@ bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) 
     }
 
     // Read the data block header (little endian - load/end/exec addresses)
+    // Note: This 6-byte header will be included in file->data_size calculation below
     if (!readDataBlockHeader(data, pos, &file->data_block_header, length)) {
         free(file->data_blocks);
         fprintf(stderr, "Failed to read data block header for binary data block\n");
