@@ -60,6 +60,20 @@ bool isBasicFile(const uint8_t *file_type) {
     return compareFileType(file_type, FILETYPE_BASIC);
 }
 
+const char* getFileTypeString(const cas_File *file) {
+    if (file->is_custom) {
+        return "custom";
+    } else if (isAsciiFile(file->file_header.file_type)) {
+        return "ascii";
+    } else if (isBinaryFile(file->file_header.file_type)) {
+        return "binary";
+    } else if (isBasicFile(file->file_header.file_type)) {
+        return "basic";
+    } else {
+        return "unknown";
+    }
+}
+
 bool readDataBlockHeader(uint8_t *data, size_t *pos, cas_DataBlockHeader *data_block_header, size_t length) {
     if (*pos + sizeof(cas_DataBlockHeader) > length) {
         return false;
@@ -91,6 +105,7 @@ bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) {
     size_t block_count = 0;
     size_t capacity = 5;
     size_t total_data_size = 0;
+    size_t total_padding_size = 0;
     bool eof_found = false;
 
     // Allocate initial array for data blocks
@@ -149,6 +164,7 @@ bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) {
         // Allocate and copy padding (EOF marker and everything after)
         size_t padding_size = block_size - data_size;
         file->data_blocks[block_count].padding_size = padding_size;
+        total_padding_size += padding_size;
         if (padding_size > 0) {
             file->data_blocks[block_count].padding = malloc(padding_size);
             if (!file->data_blocks[block_count].padding) {
@@ -166,8 +182,8 @@ bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) {
         block_count++;
     }
 
-    // Store total data size summed from actual blocks
-    file->data_size = total_data_size;
+    // Store total data size including padding
+    file->data_size = total_data_size + total_padding_size;
     file->data_block_count = block_count;
     return eof_found; // Return true only if we found EOF marker
 }
@@ -245,8 +261,8 @@ bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) 
         file->data_blocks[0].padding = NULL;
     }
 
-    // Calculate total data size (header + data, excluding CAS header and padding)
-    file->data_size = 6 + data_size;  // 6 bytes for data block header + actual data
+    // Calculate total data size (header + data + padding, excluding CAS header)
+    file->data_size = 6 + data_size + padding_size;  // 6 bytes for data block header + actual data + padding
     file->data_block_count = 1;
     return true;
 }

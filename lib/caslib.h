@@ -59,6 +59,7 @@ bool compareFileType(const uint8_t *file_type, const uint8_t *type_pattern);
 bool isAsciiFile(const uint8_t *file_type);
 bool isBinaryFile(const uint8_t *file_type);
 bool isBasicFile(const uint8_t *file_type);
+const char* getFileTypeString(const cas_File *file);
 bool readDataBlockHeader(uint8_t *data, size_t *pos, cas_DataBlockHeader *data_block_header, size_t length);
 size_t findNextCasHeader(uint8_t *data, size_t start_pos, size_t length);
 bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t length);

@@ -28,7 +28,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Print the entire container
-    printContainer(&container);
+    printDetailedContainer(&container);
 
     // Cleanup
     free(container.files);

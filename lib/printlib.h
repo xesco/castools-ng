@@ -10,6 +10,7 @@ void printFileHeader(const cas_FileHeader *file_header);
 void printDataBlockHeader(const cas_DataBlockHeader *data_block_header);
 void printDataBlock(const cas_DataBlock *data_block, size_t block_num);
 void printFile(const cas_File *file, size_t file_num);
-void printContainer(const cas_Container *container);
+void printDetailedContainer(const cas_Container *container);
+void printCompactContainer(const cas_Container *container);
 
 #endif // PRINTLIB_H
