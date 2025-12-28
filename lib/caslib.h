@@ -27,6 +27,8 @@ typedef struct {
     size_t data_size;
     uint8_t* padding;
     size_t padding_size;
+    size_t data_offset;      // offset in file where data starts
+    size_t padding_offset;   // offset in file where padding starts
 } cas_DataBlock;
 
 typedef struct {

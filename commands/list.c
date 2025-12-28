@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "../lib/caslib.h"
 #include "../lib/printlib.h"
 #include "../lib/cmdlib.h"
 
-int execute_list(const char *input_file, bool extended, bool verbose) {
+int execute_list(const char *input_file, bool extended, int filter_index, bool verbose) {
     if (verbose) {
         printf("Reading file: %s\n", input_file);
     }
@@ -33,6 +34,21 @@ int execute_list(const char *input_file, bool extended, bool verbose) {
     
     if (verbose) {
         printf("Successfully parsed %zu file(s)\n\n", container.file_count);
+    }
+    
+    // If filtering by index, show the specific file (only in extended mode)
+    if (filter_index) {
+        if (filter_index < 1 || (size_t)filter_index > container.file_count) {
+            fprintf(stderr, "Error: Index %d out of range (1-%zu)\n", filter_index, container.file_count);
+            free(container.files);
+            free(file_data);
+            return 1;
+        }
+        
+        printFile(&container.files[filter_index - 1], filter_index);
+        free(container.files);
+        free(file_data);
+        return 0;
     }
     
     // Print the list

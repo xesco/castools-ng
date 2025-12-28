@@ -62,15 +62,15 @@ bool isBasicFile(const uint8_t *file_type) {
 
 const char* getFileTypeString(const cas_File *file) {
     if (file->is_custom) {
-        return "custom";
+        return "CUSTOM";
     } else if (isAsciiFile(file->file_header.file_type)) {
-        return "ascii";
+        return "ASCII";
     } else if (isBinaryFile(file->file_header.file_type)) {
-        return "binary";
+        return "BINARY";
     } else if (isBasicFile(file->file_header.file_type)) {
-        return "basic";
+        return "BASIC";
     } else {
-        return "unknown";
+        return "UNKNOWN";
     }
 }
 
@@ -153,6 +153,7 @@ bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) {
         // Allocate and copy data (excluding EOF marker)
         file->data_blocks[block_count].data = malloc(data_size);
         file->data_blocks[block_count].data_size = data_size;
+        file->data_blocks[block_count].data_offset = *pos;  // Track file offset
         if (!file->data_blocks[block_count].data) {
             free(file->data_blocks);
             fprintf(stderr, "Failed to allocate memory for ASCII data block data\n");
@@ -164,6 +165,7 @@ bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) {
         // Allocate and copy padding (EOF marker and everything after)
         size_t padding_size = block_size - data_size;
         file->data_blocks[block_count].padding_size = padding_size;
+        file->data_blocks[block_count].padding_offset = *pos + data_size;  // Track file offset
         total_padding_size += padding_size;
         if (padding_size > 0) {
             file->data_blocks[block_count].padding = malloc(padding_size);
@@ -232,6 +234,7 @@ bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) 
     // Allocate and read the program data
     file->data_blocks[0].data = malloc(data_size);
     file->data_blocks[0].data_size = data_size;
+    file->data_blocks[0].data_offset = *pos;  // Track file offset
     if (!file->data_blocks[0].data) {
         free(file->data_blocks);
         fprintf(stderr, "Failed to allocate memory for binary data block data\n");
@@ -246,6 +249,7 @@ bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) 
     // Calculate actual padding size (bytes between end of data and next header)
     size_t padding_size = next_header_pos - *pos;
     file->data_blocks[0].padding_size = padding_size;
+    file->data_blocks[0].padding_offset = *pos;  // Track file offset
 
     if (padding_size > 0) {
         file->data_blocks[0].padding = malloc(padding_size);
@@ -286,6 +290,7 @@ bool parseCustomFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) 
     // Allocate and copy the custom data
     file->data_blocks[0].data = malloc(file->data_size);
     file->data_blocks[0].data_size = file->data_size;
+    file->data_blocks[0].data_offset = *pos;  // Track file offset
     if (!file->data_blocks[0].data) {
         fprintf(stderr, "Failed to allocate memory for custom data\n");
         free(file->data_blocks);
@@ -294,6 +299,7 @@ bool parseCustomFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) 
     memcpy(file->data_blocks[0].data, data + *pos, file->data_size);
     file->data_blocks[0].padding = NULL;
     file->data_blocks[0].padding_size = 0;
+    file->data_blocks[0].padding_offset = 0;  // No padding for custom files
     file->data_block_count = 1;
 
     *pos = next_header_pos;

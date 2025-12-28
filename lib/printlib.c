@@ -56,7 +56,7 @@ void printCasHeader(const cas_Header *header) {
 }
 
 void printFileHeader(const cas_FileHeader *file_header) {
-    printf("  File Type: ");
+    printf("  FileID: ");
     for (size_t i = 0; i < sizeof(file_header->file_type); i++) {
         printf("%02X ", file_header->file_type[i]);
     }
@@ -83,27 +83,25 @@ void printDataBlockHeader(const cas_DataBlockHeader *data_block_header) {
 
 void printDataBlock(const cas_DataBlock *data_block, size_t block_num) {
     printf("  Data Block #%zu:\n", block_num);
-    printCasHeader(&data_block->header);
     printf("    Data Size:    %zu bytes\n", data_block->data_size);
     printf("    Padding Size: %zu bytes\n", data_block->padding_size);
     
     if (data_block->data_size > 0) {
+        printf("\n");
         printf("    Data:\n");
-        printHexDump(data_block->data, data_block->data_size, 0);
+        printHexDump(data_block->data, data_block->data_size, data_block->data_offset);
     }
     
     if (data_block->padding_size > 0) {
         printf("\n");
         printf("    Padding:\n");
-        printHexDump(data_block->padding, data_block->padding_size, 0);
+        printHexDump(data_block->padding, data_block->padding_size, data_block->padding_offset);
     }
 }
 
 void printFile(const cas_File *file, size_t file_num) {
-    printf("\nFile #%zu:\n", file_num);
+    printf("File #%zu:\n", file_num);
     printf("  Type: %s\n", getFileTypeString(file));
-    
-    printCasHeader(&file->header);
     
     if (!file->is_custom) {
         printFileHeader(&file->file_header);
@@ -127,9 +125,9 @@ void printDetailedContainer(const cas_Container *container) {
     printf("  Total Files: %zu\n", container->file_count);
     
     for (size_t i = 0; i < container->file_count; i++) {
+        printf("\n");
         printFile(&container->files[i], i + 1);
     }
-    
     printf("\n");
 }
 

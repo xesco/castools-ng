@@ -7,7 +7,6 @@
 
 // Forward declarations for command handlers
 static int cmd_list(int argc, char *argv[]);
-static int cmd_dump(int argc, char *argv[]);
 static int cmd_info(int argc, char *argv[]);
 static int cmd_extract(int argc, char *argv[]);
 
@@ -21,7 +20,6 @@ typedef struct {
 // Available commands
 static const Command commands[] = {
     {"list", cmd_list, "List files in a CAS container"},
-    {"dump", cmd_dump, "Show hexdump of file(s)"},
     {"info", cmd_info, "Show container statistics"},
     {"extract", cmd_extract, "Extract file(s) from container"},
     {NULL, NULL, NULL}
@@ -38,11 +36,13 @@ static void print_usage(const char *prog_name) {
 
 static int cmd_list(int argc, char *argv[]) {
     const char *input_file = NULL;
+    int filter_index = 0;
     bool extended = false;
     bool verbose = false;
     
     struct option long_options[] = {
         {"extended", no_argument, 0, 'e'},
+        {"index", required_argument, 0, 'i'},
         {"verbose", no_argument, 0, 'v'},
         {"help", no_argument, 0, 'h'},
         {0, 0, 0, 0}
@@ -50,10 +50,13 @@ static int cmd_list(int argc, char *argv[]) {
     
     int opt;
     optind = 1; // Reset getopt
-    while ((opt = getopt_long(argc, argv, "evh", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "ei:vh", long_options, NULL)) != -1) {
         switch (opt) {
             case 'e':
                 extended = true;
+                break;
+            case 'i':
+                filter_index = atoi(optarg);
                 break;
             case 'v':
                 verbose = true;
@@ -61,9 +64,10 @@ static int cmd_list(int argc, char *argv[]) {
             case 'h':
                 printf("Usage: cast list <file.cas> [options]\n\n");
                 printf("Options:\n");
-                printf("  -e, --extended    Show extended information (addresses, sizes)\n");
-                printf("  -v, --verbose     Verbose output\n");
-                printf("  -h, --help        Show this help message\n");
+                printf("  -e, --extended      Show extended information (sizes, headers, data, etc..)\n");
+                printf("  -i, --index <num>   Show only specific file by index (1-based, requires -e/--extended)\n");
+                printf("  -v, --verbose       Verbose output\n");
+                printf("  -h, --help          Show this help message\n");
                 return 0;
             default:
                 return 1;
@@ -78,62 +82,14 @@ static int cmd_list(int argc, char *argv[]) {
     
     input_file = argv[optind];
     
-    // Execute the list command
-    return execute_list(input_file, extended, verbose);
-}
-
-static int cmd_dump(int argc, char *argv[]) {
-    const char *input_file = NULL;
-    const char *file_name = NULL;
-    bool verbose = false;
-    
-    struct option long_options[] = {
-        {"file", required_argument, 0, 'f'},
-        {"verbose", no_argument, 0, 'v'},
-        {"help", no_argument, 0, 'h'},
-        {0, 0, 0, 0}
-    };
-    
-    int opt;
-    optind = 1;
-    while ((opt = getopt_long(argc, argv, "f:vh", long_options, NULL)) != -1) {
-        switch (opt) {
-            case 'f':
-                file_name = optarg;
-                break;
-            case 'v':
-                verbose = true;
-                break;
-            case 'h':
-                printf("Usage: cast dump <file.cas> [options]\n\n");
-                printf("Options:\n");
-                printf("  -f, --file <name> Dump specific file (default: all files)\n");
-                printf("  -v, --verbose     Verbose output\n");
-                printf("  -h, --help        Show this help message\n");
-                return 0;
-            default:
-                return 1;
-        }
-    }
-    
-    if (optind >= argc) {
-        fprintf(stderr, "Error: Missing required argument <file.cas>\n");
-        fprintf(stderr, "Usage: cast dump <file.cas> [options]\n");
+    // Validate that -i requires -e
+    if (filter_index && !extended) {
+        fprintf(stderr, "Error: -i/--index option requires -e/--extended\n");
         return 1;
     }
     
-    input_file = argv[optind];
-    
-    // Print parsed options (boilerplate)
-    printf("Command: dump\n");
-    printf("  Input file: %s\n", input_file);
-    printf("  Filter file: %s\n", file_name ? file_name : "(all)");
-    printf("  Verbose: %s\n", verbose ? "yes" : "no");
-    
-    // TODO: Implement actual dump functionality
-    printf("\n[TODO: Dump hexdump of %s]\n", input_file);
-    
-    return 0;
+    // Execute the list command
+    return execute_list(input_file, extended, filter_index, verbose);
 }
 
 static int cmd_info(int argc, char *argv[]) {

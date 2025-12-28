@@ -1,0 +1,11 @@
+# Binary
+cast
+
+# Object files
+*.o
+
+# Test files
+*.cas
+*.wav
+*.bin
+*.json

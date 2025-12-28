@@ -3,6 +3,6 @@
 
 #include <stdbool.h>
 
-int execute_list(const char *input_file, bool extended, bool verbose);
+int execute_list(const char *input_file, bool extended, int filter_index, bool verbose);
 
 #endif
