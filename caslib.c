@@ -7,7 +7,7 @@ const uint8_t FILETYPE_ASCII[10]  = {0xEA, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA, 0
 const uint8_t FILETYPE_BINARY[10] = {0xD0, 0xD0, 0xD0, 0xD0, 0xD0, 0xD0, 0xD0, 0xD0, 0xD0, 0xD0};
 const uint8_t FILETYPE_BASIC[10]  = {0xD3, 0xD3, 0xD3, 0xD3, 0xD3, 0xD3, 0xD3, 0xD3, 0xD3, 0xD3};
 
-bool nextCasHeader(uint8_t *data, size_t *pos, size_t length) {
+bool isCasHeader(uint8_t *data, size_t *pos, size_t length) {
     if (*pos + sizeof(CAS_HEADER) <= length) {
         if (memcmp(data + *pos, CAS_HEADER, sizeof(CAS_HEADER)) == 0) {
             return true;
@@ -80,7 +80,7 @@ size_t findNextCasHeader(uint8_t *data, size_t start_pos, size_t length) {
 
     // Search for next CAS header at 8-byte boundaries
     for (size_t i = aligned_pos; i + 8 <= length; i += 8) {
-        if (nextCasHeader(data, &i, length)) {
+        if (isCasHeader(data, &i, length)) {
             return i;
         }
     }
@@ -103,7 +103,7 @@ bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) {
     // Read data blocks until EOF marker is found
     while (!eof_found) {
         // Find next CAS header (for the data block)
-        if (!nextCasHeader(data, pos, length)) {
+        if (!isCasHeader(data, pos, length)) {
             break; // No more blocks
         }
 
@@ -181,7 +181,7 @@ bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) 
     }
 
     // Find the second CAS header (for the data block)
-    if (!nextCasHeader(data, pos, length)) {
+    if (!isCasHeader(data, pos, length)) {
         free(file->data_blocks);
         fprintf(stderr, "Failed to find second CAS header for binary data block\n");
         return false;
@@ -364,7 +364,7 @@ bool parseCasContainer(uint8_t *data, cas_Container *container, size_t length) {
     }
 
     // Parse files while we can find CAS headers
-    while (nextCasHeader(data, &pos, length)) {
+    while (isCasHeader(data, &pos, length)) {
         // Check if we need to resize the array
         if (container->file_count >= capacity) {
             if (!expandArray((void**)&container->files, &capacity, sizeof(cas_File))) {

@@ -51,7 +51,7 @@ typedef struct {
 } cas_Container;
 
 // Function declarations
-bool nextCasHeader(uint8_t *data, size_t *pos, size_t length);
+bool isCasHeader(uint8_t *data, size_t *pos, size_t length);
 bool readCasHeader(uint8_t *data, size_t *pos, cas_Header *header, size_t length);
 bool readFileHeader(uint8_t *data, size_t *pos, cas_FileHeader *file_header, size_t length);
 bool peekFileType(uint8_t *data, size_t pos, uint8_t *file_type, size_t length);
