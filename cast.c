@@ -9,6 +9,7 @@
 static int cmd_list(int argc, char *argv[]);
 static int cmd_info(int argc, char *argv[]);
 static int cmd_export(int argc, char *argv[]);
+static int cmd_doctor(int argc, char *argv[]);
 
 // Command structure
 typedef struct {
@@ -22,6 +23,7 @@ static const Command commands[] = {
     {"list", cmd_list, "List files in a CAS container"},
     {"info", cmd_info, "Show container statistics"},
     {"export", cmd_export, "Export file(s) from container"},
+    {"doctor", cmd_doctor, "Check CAS file integrity"},
     {NULL, NULL, NULL}
 };
 
@@ -57,8 +59,17 @@ static void print_export_help(void) {
     printf("Options:\n");
     printf("  -i, --index <num>   Export only specific file by index (1-based)\n");
     printf("  -d, --dir <dir>     Output directory (default: current directory)\n");
-    printf("  -D, --disk-format   Add MSX-DOS disk format headers (0xFE/0xFF prefix)\n");
+    printf("  -D, --disk-format   Add MSX-DOS disk format markers for Binary files (0xFE/0xFF prefix and postfix)\n");
     printf("  -f, --force         Overwrite existing files\n");
+    printf("  -v, --verbose       Verbose output\n");
+    printf("  -h, --help          Show this help message\n");
+}
+
+static void print_doctor_help(void) {
+    printf("Usage: cast doctor <file.cas> [options]\n\n");
+    printf("Check CAS file integrity and detect issues.\n\n");
+    printf("Options:\n");
+    printf("  -m, --disk-markers  Check for disk format markers (0xFE/0xFF) in BINARY files\n");
     printf("  -v, --verbose       Verbose output\n");
     printf("  -h, --help          Show this help message\n");
 }
@@ -68,7 +79,7 @@ static int cmd_list(int argc, char *argv[]) {
     int filter_index = 0;
     bool extended = false;
     bool verbose = false;
-    
+
     struct option long_options[] = {
         {"extended", no_argument, 0, 'e'},
         {"index", required_argument, 0, 'i'},
@@ -76,7 +87,7 @@ static int cmd_list(int argc, char *argv[]) {
         {"help", no_argument, 0, 'h'},
         {0, 0, 0, 0}
     };
-    
+
     int opt;
     optind = 1; // Reset getopt
     while ((opt = getopt_long(argc, argv, "ei:vh", long_options, NULL)) != -1) {
@@ -97,20 +108,20 @@ static int cmd_list(int argc, char *argv[]) {
                 return 1;
         }
     }
-    
+
     if (optind >= argc) {
         print_list_help();
         return 0;
     }
-    
+
     input_file = argv[optind];
-    
+
     // Validate that -i requires -e
     if (filter_index && !extended) {
         fprintf(stderr, "Error: -i/--index option requires -e/--extended\n");
         return 1;
     }
-    
+
     // Execute the list command
     return execute_list(input_file, extended, filter_index, verbose);
 }
@@ -118,13 +129,13 @@ static int cmd_list(int argc, char *argv[]) {
 static int cmd_info(int argc, char *argv[]) {
     const char *input_file = NULL;
     bool verbose = false;
-    
+
     struct option long_options[] = {
         {"verbose", no_argument, 0, 'v'},
         {"help", no_argument, 0, 'h'},
         {0, 0, 0, 0}
     };
-    
+
     int opt;
     optind = 1;
     while ((opt = getopt_long(argc, argv, "vh", long_options, NULL)) != -1) {
@@ -139,22 +150,22 @@ static int cmd_info(int argc, char *argv[]) {
                 return 1;
         }
     }
-    
+
     if (optind >= argc) {
         print_info_help();
         return 0;
     }
-    
+
     input_file = argv[optind];
-    
+
     // Print parsed options (boilerplate)
     printf("Command: info\n");
     printf("  Input file: %s\n", input_file);
     printf("  Verbose: %s\n", verbose ? "yes" : "no");
-    
+
     // TODO: Implement actual info functionality
     printf("\n[TODO: Show statistics for %s]\n", input_file);
-    
+
     return 0;
 }
 
@@ -165,7 +176,7 @@ static int cmd_export(int argc, char *argv[]) {
     bool force = false;
     bool verbose = false;
     bool disk_format = false;
-    
+
     struct option long_options[] = {
         {"index", required_argument, 0, 'i'},
         {"dir", required_argument, 0, 'd'},
@@ -175,7 +186,7 @@ static int cmd_export(int argc, char *argv[]) {
         {"help", no_argument, 0, 'h'},
         {0, 0, 0, 0}
     };
-    
+
     int opt;
     optind = 1;
     while ((opt = getopt_long(argc, argv, "i:d:Dfvh", long_options, NULL)) != -1) {
@@ -202,16 +213,56 @@ static int cmd_export(int argc, char *argv[]) {
                 return 1;
         }
     }
-    
+
     if (optind >= argc) {
         print_export_help();
         return 0;
     }
-    
+
     input_file = argv[optind];
-    
+
     // Call the execute_export implementation
     return execute_export(input_file, index, output_dir, force, verbose, disk_format);
+}
+
+static int cmd_doctor(int argc, char *argv[]) {
+    const char *input_file = NULL;
+    bool check_disk_markers = false;
+    bool verbose = false;
+
+    struct option long_options[] = {
+        {"disk-markers", no_argument, 0, 'm'},
+        {"verbose", no_argument, 0, 'v'},
+        {"help", no_argument, 0, 'h'},
+        {0, 0, 0, 0}
+    };
+
+    int opt;
+    optind = 1; // Reset getopt
+    while ((opt = getopt_long(argc, argv, "mvh", long_options, NULL)) != -1) {
+        switch (opt) {
+            case 'm':
+                check_disk_markers = true;
+                break;
+            case 'v':
+                verbose = true;
+                break;
+            case 'h':
+                print_doctor_help();
+                return 0;
+            default:
+                return 1;
+        }
+    }
+
+    if (optind >= argc) {
+        print_doctor_help();
+        return 0;
+    }
+
+    input_file = argv[optind];
+
+    return execute_doctor(input_file, check_disk_markers, verbose);
 }
 
 int main(int argc, char *argv[]) {
@@ -219,18 +270,18 @@ int main(int argc, char *argv[]) {
         print_usage(argv[0]);
         return 1;
     }
-    
+
     // Check for global --help or --version
     if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
         print_usage(argv[0]);
         return 0;
     }
-    
+
     if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-V") == 0) {
         printf("cast version 1.0.0\n");
         return 0;
     }
-    
+
     // Find and execute command
     const char *cmd_name = argv[1];
     for (const Command *cmd = commands; cmd->name != NULL; cmd++) {
@@ -238,7 +289,7 @@ int main(int argc, char *argv[]) {
             return cmd->handler(argc - 1, argv + 1);
         }
     }
-    
+
     fprintf(stderr, "Error: Unknown command '%s'\n", cmd_name);
     fprintf(stderr, "Run '%s --help' for usage.\n", argv[0]);
     return 1;

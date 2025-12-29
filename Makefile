@@ -5,6 +5,7 @@ TARGET = cast
 SRCS = cast.c \
        commands/list.c \
        commands/export.c \
+       commands/doctor.c \
        lib/caslib.c \
        lib/printlib.c \
        lib/cmdlib.c

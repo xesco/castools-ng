@@ -157,25 +157,17 @@ bool writeFileData(const char *filename, const cas_File *file, bool verbose, boo
         return false;
     }
     
-    // DIFFERENCE FROM MCP:
-    // mcp (https://github.com/ibidem/mcp) adds 0xFE for BINARY files but omits the 0xFF end marker.
-    // It also includes padding bytes in all exports. We provide clean exports by default.
+    // Disk BASIC binary files use stream markers:
+    //   - 0xFE marks the start of a binary stream
+    //   - 0xFF marks the end of the binary stream
     //
-    // BINARY FILE FORMAT
-    // - 0xFE (start marker)
-    // - 6-byte header (load, end, exec addresses)
-    // - program data
-    // - 0xFF (end marker)
+    // The load/end addresses describe where data goes in memory,
+    // but Disk BASIC reads a raw byte stream and needs explicit
+    // markers to detect the beginning and end of the binary.
     //
-    // BASIC FILE FORMAT
-    // - 6-byte header (load, end, exec addresses)
-    // - tokenized BASIC data
-    // - NO 0xFE/0xFF markers
-    //
-    // RATIONALE:
-    // - Default export: clean data without markers (for analysis/modification)
-    // - --disk-format: full MSX-compatible format with markers
-    
+    // CAS files already provide framing and address metadata,
+    // so their binary payloads do not include these markers.
+
     // For BINARY files: write 0xFE prefix if disk format
     if (isBinaryFile(file->file_header.file_type) && disk_format) {
         uint8_t prefix = 0xFE;
