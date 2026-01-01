@@ -176,6 +176,9 @@ bool writeFileData(const char *filename, const cas_File *file, bool verbose, boo
                 fclose(fp);
                 return false;
             }
+            if (verbose) {
+                printf("Added 0xFF prefix (BASIC file identifier)\n");
+            }
         } else if (isBinaryFile(file->file_header.file_type)) {
             // Binary files start with 0xFE (first byte of 7-byte header)
             uint8_t prefix = BINARY_FILE_ID_BYTE;  // 0xFE
@@ -183,6 +186,9 @@ bool writeFileData(const char *filename, const cas_File *file, bool verbose, boo
                 fprintf(stderr, "Error: Failed to write binary prefix to '%s'\n", filename);
                 fclose(fp);
                 return false;
+            }
+            if (verbose) {
+                printf("Added 0xFE prefix (BSAVE file identifier)\n");
             }
         }
     }

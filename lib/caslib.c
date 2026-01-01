@@ -352,8 +352,9 @@ static bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t l
         return false;
     }
 
-    // With the addresses compute file size: end address - load address
-    size_t data_size = file->data_block_header.end_address - file->data_block_header.load_address;
+    // With the addresses compute file size: end address - load address + 1
+    // (the +1 includes the end address byte itself)
+    size_t data_size = file->data_block_header.end_address - file->data_block_header.load_address + 1;
 
     // Check if we have enough data
     if (*pos + data_size > length) {
