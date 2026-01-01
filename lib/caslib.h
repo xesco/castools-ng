@@ -7,6 +7,11 @@
 
 #define ASCII_BLOCK_SIZE 256
 
+// Disk BASIC file format markers
+#define BINARY_FILE_ID_BYTE 0xFE  // Marks start of binary stream (disk BASIC format)
+#define BASIC_FILE_ID_BYTE  0xFF  // Marks tokenized BASIC file (disk format only)
+#define EOF_MARKER          0x1A  // End-of-file marker for ASCII files
+
 extern const uint8_t CAS_HEADER[8];
 extern const uint8_t FILETYPE_ASCII[10];
 extern const uint8_t FILETYPE_BINARY[10];
@@ -53,23 +58,10 @@ typedef struct {
 } cas_Container;
 
 // Function declarations
-bool isCasHeader(uint8_t *data, size_t *pos, size_t length);
-bool readCasHeader(uint8_t *data, size_t *pos, cas_Header *header, size_t length);
-bool readFileHeader(uint8_t *data, size_t *pos, cas_FileHeader *file_header, size_t length);
-bool peekFileType(uint8_t *data, size_t pos, uint8_t *file_type, size_t length);
-bool compareFileType(const uint8_t *file_type, const uint8_t *type_pattern);
 bool isAsciiFile(const uint8_t *file_type);
 bool isBinaryFile(const uint8_t *file_type);
 bool isBasicFile(const uint8_t *file_type);
 const char* getFileTypeString(const cas_File *file);
-bool readDataBlockHeader(uint8_t *data, size_t *pos, cas_DataBlockHeader *data_block_header, size_t length);
-size_t findNextCasHeader(uint8_t *data, size_t start_pos, size_t length);
-bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t length);
-bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t length);
-bool parseCustomFile(uint8_t *data, cas_File *file, size_t *pos, size_t length);
-bool expandArray(void **array, size_t *capacity, size_t item_size);
-void* allocateArray(size_t capacity, size_t item_size);
-bool parseFile(uint8_t *data, cas_File *file, size_t *pos, size_t length);
 bool parseCasContainer(uint8_t *data, cas_Container *container, size_t length);
 
 #endif // CASLIB_H

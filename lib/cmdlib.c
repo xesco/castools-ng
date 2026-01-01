@@ -157,28 +157,37 @@ bool writeFileData(const char *filename, const cas_File *file, bool verbose, boo
         return false;
     }
     
-    // Disk BASIC binary files use stream markers:
-    //   - 0xFE marks the start of a binary stream
-    //   - 0xFF marks the end of the binary stream
+    // MSX Disk file format identifiers (disk format only):
+    //   - Tokenized BASIC programs: 0xFF as first byte (file type identifier)
+    //   - Binary files (BSAVE): 0xFE as first byte of 7-byte header
+    //     Header: [0xFE][start_addr][end_addr][exec_addr] (all addresses little-endian)
     //
-    // The load/end addresses describe where data goes in memory,
-    // but Disk BASIC reads a raw byte stream and needs explicit
-    // markers to detect the beginning and end of the binary.
-    //
-    // CAS files already provide framing and address metadata,
-    // so their binary payloads do not include these markers.
+    // CAS (cassette) format uses different headers (0xD3 for BASIC, 0xD0 for binary),
+    // so when extracting to disk files with --disk-format flag, we add the appropriate
+    // disk identifier byte.
 
-    // For BINARY files: write 0xFE prefix if disk format
-    if (isBinaryFile(file->file_header.file_type) && disk_format) {
-        uint8_t prefix = 0xFE;
-        if (fwrite(&prefix, 1, 1, fp) != 1) {
-            fprintf(stderr, "Error: Failed to write prefix to '%s'\n", filename);
-            fclose(fp);
-            return false;
+    // For disk format: write appropriate prefix byte
+    if (disk_format) {
+        if (isBasicFile(file->file_header.file_type)) {
+            // Tokenized BASIC files start with 0xFF
+            uint8_t prefix = 0xFF;
+            if (fwrite(&prefix, 1, 1, fp) != 1) {
+                fprintf(stderr, "Error: Failed to write BASIC prefix to '%s'\n", filename);
+                fclose(fp);
+                return false;
+            }
+        } else if (isBinaryFile(file->file_header.file_type)) {
+            // Binary files start with 0xFE (first byte of 7-byte header)
+            uint8_t prefix = BINARY_FILE_ID_BYTE;  // 0xFE
+            if (fwrite(&prefix, 1, 1, fp) != 1) {
+                fprintf(stderr, "Error: Failed to write binary prefix to '%s'\n", filename);
+                fclose(fp);
+                return false;
+            }
         }
     }
     
-    // Write header for BINARY and BASIC files (BASIC has NO 0xFE/0xFF markers)
+    // Write header for BINARY and BASIC files
     if (isBinaryFile(file->file_header.file_type) || isBasicFile(file->file_header.file_type)) {
         if (!write_data_block_header(fp, filename, &file->data_block_header)) {
             fclose(fp);
@@ -200,15 +209,7 @@ bool writeFileData(const char *filename, const cas_File *file, bool verbose, boo
         }
     }
     
-    // For BINARY files: write 0xFF suffix (if disk format)
-    if (isBinaryFile(file->file_header.file_type) && disk_format) {
-        uint8_t suffix = 0xFF;
-        if (fwrite(&suffix, 1, 1, fp) != 1) {
-            fprintf(stderr, "Error: Failed to write suffix to '%s'\n", filename);
-            fclose(fp);
-            return false;
-        }
-    }
+    // No suffix marker needed - MSX disk format files end immediately after data
     
     fclose(fp);
     

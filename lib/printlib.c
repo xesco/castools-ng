@@ -3,10 +3,9 @@
 #include <stdio.h>
 #include <ctype.h>
 
-// Helper function to check if file has addresses (binary or basic)
+// Helper function to check if file has addresses (binary only, not basic)
 static bool has_addresses(const cas_File *file) {
-    return !file->is_custom && (isBinaryFile(file->file_header.file_type) || 
-                                 isBasicFile(file->file_header.file_type));
+    return !file->is_custom && isBinaryFile(file->file_header.file_type);
 }
 
 void printHexDump(const uint8_t *data, size_t size, size_t base_offset) {
