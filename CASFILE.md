@@ -254,12 +254,12 @@ Since `BINARY/BASIC` files always have exactly 2 blocks (file header + data bloc
 After the program data, padding bytes (typically `0x00`) are added to ensure the next `CAS HEADER` starts at an 8-byte aligned file offset. The padding rule is:
 
 - Calculate: `remainder = current_position % 8`
-- If `remainder != 0`: add `8 - remainder` padding bytes
-- If `remainder == 0` (already aligned): **still add 8 padding bytes** to reach the next 8-byte boundary
+- If `remainder != 0`: add `8 - remainder` padding bytes to reach the next 8-byte boundary
+- If `remainder == 0` (already aligned): no padding needed (next header can start immediately)
 
-This means every data block is padded to ensure the next CAS header lands on a multiple-of-8 file offset, even when the block already ends at an aligned position. The only exception is the last file in the container, which may have partial or no padding if it ends exactly at EOF.
+CAS headers are always located at 8-byte aligned file offsets (0, 8, 16, 24, ...). Padding fills the gap between the end of program data and the next aligned position where a CAS header can appear. The last file in a container may have no padding if it ends at EOF.
 
-Example: If program data ends at file offset 0xB0C8 (which is 0xB0C8 % 8 = 0, already aligned), you must still add 8 padding bytes to reach 0xB0D0 where the next CAS header will start.
+Example: If program data ends at file offset 0xB0C5, the remainder is 5, so add 3 padding bytes to reach 0xB0C8 where the next CAS header starts.
 
 **Data Size Calculation:**
 
@@ -283,7 +283,7 @@ When `BINARY` and `BASIC` files are stored on disk (e.g., in MSX-DOS), they incl
 - **BINARY files:** `0xFE` prefix byte (not present in CAS format)
 - **BASIC files:**  `0xFF` prefix byte (not present in CAS format)
 
-These ID bytes are **NOT** stored in CAS files—they belong to the disk file format. When extracting `BINARY` files from CAS, tools typically add the `0xFE` prefix to match the disk format. When adding `BINARY/BASIC` files to a CAS, tools automatically strip these prefix bytes if present.
+These ID bytes are **NOT** stored in CAS files—they belong to the disk file format. When extracting files from CAS to disk format, tools add the appropriate prefix (`0xFE` for BINARY, `0xFF` for BASIC) to match the disk format. When adding `BINARY/BASIC` files to a CAS, tools automatically strip these prefix bytes if present.
 
 **Example: Adding prefix when extracting BINARY file from CAS to disk**
 
