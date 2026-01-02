@@ -307,6 +307,7 @@ static bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t le
     }
 
     // Store total data size including padding
+    // file->data_size represents the total block size (data + padding) for all blocks
     file->data_size = total_data_size + total_padding_size;
     file->data_block_count = block_count;
     return eof_found; // Return true only if we found EOF marker
@@ -347,6 +348,7 @@ static bool parseBasicFile(uint8_t *data, cas_File *file, size_t *pos, size_t le
     }
     *pos += padding_size;
 
+    // file->data_size = total block size (data + padding) for export/display
     file->data_size = data_size + padding_size;
     return true;
 }
@@ -398,7 +400,7 @@ static bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t l
     }
     *pos += padding_size;
 
-    // Calculate total data size (header + data + padding, excluding CAS header)
+    // file->data_size = total block size (6-byte header + data + padding)
     file->data_size = 6 + data_size + padding_size;  // 6 bytes for data block header + actual data + padding
     return true;
 }
@@ -409,6 +411,7 @@ static bool parseCustomFile(uint8_t *data, cas_File *file, size_t *pos, size_t l
     size_t start_pos = *pos;
 
     // Find next CAS_HEADER or end of file
+    // file->data_size = total block size for custom blocks
     size_t next_header_pos = findNextCasHeader(data, *pos, length);
     file->data_size = next_header_pos - start_pos;
 
