@@ -156,6 +156,46 @@ static void initializeDataBlockNoPadding(cas_DataBlock *block) {
     block->padding_offset = 0;
 }
 
+// Helper function to find the actual end of BASIC data by parsing line structure
+// BASIC programs are stored as linked lines where each line starts with:
+//   [next_line_addr:2 bytes (little-endian)][line_number:2 bytes][line_text...][0x00]
+// When next_line_addr is 0x0000, it marks the end of the program
+// Returns the byte offset where actual BASIC data ends (including the 0x0000 marker)
+// Returns size if structure is invalid or truncated
+static size_t findBasicDataEnd(uint8_t *data, size_t block_size) {
+    size_t pos = 0;
+    
+    // Safety check: block must have at least 2 bytes for an address
+    if (block_size < 2) {
+        return block_size;
+    }
+    
+    // Parse line-linked structure
+    while (pos + 2 <= block_size) {
+        uint16_t next_addr = readLittleEndian16(&data[pos]);
+        
+        // End-of-program marker: next address is 0x0000
+        if (next_addr == 0x0000) {
+            // Include the 0x0000 marker itself plus any following 0x00 byte
+            return pos + 2;
+        }
+        
+        // Validate that next_addr points to a location within the block
+        if (next_addr <= pos || next_addr > block_size) {
+            // Invalid structure - link points beyond block or backwards
+            // Return current position as end of valid data
+            return pos;
+        }
+        
+        // Jump to next line
+        pos = next_addr;
+    }
+    
+    // Reached end of block without finding 0x0000 marker
+    // Return entire block as data (shouldn't happen with valid BASIC)
+    return block_size;
+}
+
 // Helper function to read CAS header for a data block
 static bool readDataBlockCasHeader(uint8_t *data, cas_File *file, size_t *pos, size_t length, const char *error_msg) {
     if (!isCasHeader(data, pos, length)) {
@@ -246,33 +286,19 @@ static bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t le
         }
 
         // Allocate and copy data (excluding EOF marker)
-        file->data_blocks[block_count].data = malloc(data_size);
-        file->data_blocks[block_count].data_size = data_size;
-        file->data_blocks[block_count].data_offset = *pos;  // Track file offset
-        if (!file->data_blocks[block_count].data) {
+        if (!allocateAndCopyData(&file->data_blocks[block_count], data + *pos, data_size, *pos, "ASCII data block")) {
             free(file->data_blocks);
-            fprintf(stderr, "Failed to allocate memory for ASCII data block data\n");
             return false;
         }
-        memcpy(file->data_blocks[block_count].data, data + *pos, data_size);
         total_data_size += data_size;
 
         // Allocate and copy padding (EOF marker and everything after)
         size_t padding_size = block_size - data_size;
-        file->data_blocks[block_count].padding_size = padding_size;
-        file->data_blocks[block_count].padding_offset = *pos + data_size;  // Track file offset
         total_padding_size += padding_size;
-        if (padding_size > 0) {
-            file->data_blocks[block_count].padding = malloc(padding_size);
-            if (!file->data_blocks[block_count].padding) {
-                free(file->data_blocks[block_count].data);
-                free(file->data_blocks);
-                fprintf(stderr, "Failed to allocate memory for ASCII data block padding\n");
-                return false;
-            }
-            memcpy(file->data_blocks[block_count].padding, data + *pos + data_size, padding_size);
-        } else {
-            file->data_blocks[block_count].padding = NULL;
+        if (!allocateAndCopyPadding(&file->data_blocks[block_count], data + *pos + data_size, padding_size, *pos + data_size, "ASCII data block")) {
+            free(file->data_blocks[block_count].data);
+            free(file->data_blocks);
+            return false;
         }
 
         *pos += block_size;
@@ -294,27 +320,16 @@ static bool parseBasicFile(uint8_t *data, cas_File *file, size_t *pos, size_t le
         return false;
     }
 
-    // BASIC files don't have a data block header - just raw tokenized data
-    // Find next CAS header to determine data size
+    // BASIC files don't have a 6-byte address header (unlike BINARY) - just raw tokenized data after the CAS header
+    // Parse the line-linked structure to find where actual data ends
+    // BASIC programs have 0x0000 as the end-of-program marker to separate data from tape padding
     size_t data_start = *pos;
     size_t next_header_pos = findNextCasHeader(data, *pos, length);
     size_t total_size = next_header_pos - data_start;
     
-    // Data size is everything up to the padding (aligned to 8 bytes)
-    size_t data_size = total_size;
-    size_t padding_size = 0;
-    
-    // Check for padding (should be at 8-byte boundary)
-    if (total_size % 8 != 0) {
-        // This shouldn't happen, but handle it
-        data_size = total_size;
-    } else {
-        // Find actual data end by looking for padding zeroes
-        while (data_size > 0 && data[data_start + data_size - 1] == 0) {
-            data_size--;
-            padding_size++;
-        }
-    }
+    // Find actual data end by parsing BASIC line structure (follows link pointers)
+    size_t data_size = findBasicDataEnd(data + *pos, total_size);
+    size_t padding_size = total_size - data_size;
 
     // Allocate and read the program data
     if (!allocateAndCopyData(&file->data_blocks[0], data + *pos, data_size, *pos, "basic data block")) {

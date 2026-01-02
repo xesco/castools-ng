@@ -193,8 +193,8 @@ bool writeFileData(const char *filename, const cas_File *file, bool verbose, boo
         }
     }
     
-    // Write header for BINARY and BASIC files
-    if (isBinaryFile(file->file_header.file_type) || isBasicFile(file->file_header.file_type)) {
+    // Write header for BINARY files only (BINARY has 6-byte address header, BASIC does not)
+    if (isBinaryFile(file->file_header.file_type)) {
         if (!write_data_block_header(fp, filename, &file->data_block_header)) {
             fclose(fp);
             fprintf(stderr, "Error: Failed to write data block header to '%s'\n", filename);
