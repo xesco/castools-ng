@@ -172,7 +172,7 @@ static size_t findBasicDataEnd(uint8_t *data, size_t block_size) {
     
     // Parse line-linked structure
     while (pos + 2 <= block_size) {
-        uint16_t next_addr = readLittleEndian16(&data[pos]);
+        uint16_t next_addr = readLittleEndian16(data + pos);
         
         // End-of-program marker: next address is 0x0000
         if (next_addr == 0x0000) {
