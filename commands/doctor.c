@@ -44,17 +44,15 @@ static int check_file_markers(const cas_File *file, int index) {
         // BASIC files only have one data block
         const cas_DataBlock *block = &file->data_blocks[0];
         
-        if (!block->data || block->data_size == 0) {
-            return 0;
-        }
-        
-        // Check for 0xFF marker at the start (disk tokenized BASIC format indicator)
-        if (block->data[0] == 0xFF) {
-            printf("Warning: File %d (BASIC) contains 0xFF disk marker at start (offset 0x%08zx):\n", 
-                   index, block->data_offset);
-            size_t show_len = (block->data_size < 16) ? block->data_size : 16;
-            printHexDump(block->data, show_len, block->data_offset);
-            issues_found++;
+        // Check for 0xFF marker at the start of data
+        if (block->data && block->data_size > 0) {
+            if (block->data[0] == 0xFF) {
+                printf("Warning: File %d (BASIC) contains 0xFF disk marker at start (offset 0x%08zx):\n", 
+                       index, block->data_offset);
+                size_t show_len = (block->data_size < 16) ? block->data_size : 16;
+                printHexDump(block->data, show_len, block->data_offset);
+                issues_found++;
+            }
         }
     }
     
@@ -99,7 +97,7 @@ int execute_doctor(const char *input_file, bool check_disk_markers, bool verbose
     // Perform enabled checks
     if (check_disk_markers) {
         if (verbose) {
-            printf("Checking for disk format markers in BINARY files...\n\n");
+            printf("Checking for disk format markers...\n\n");
         }
         
         // Check each file
@@ -109,9 +107,9 @@ int execute_doctor(const char *input_file, bool check_disk_markers, bool verbose
         }
         
         if (total_issues == 0) {
-            printf("✓ No disk format markers found in BINARY files\n");
+            printf("✓ No disk format markers found\n");
         } else {
-            printf("\nFound %d issue(s) in BINARY files\n", total_issues);
+            printf("\nFound %d issue(s) with disk format markers\n", total_issues);
         }
     }
     

@@ -156,18 +156,21 @@ static void initializeDataBlockNoPadding(cas_DataBlock *block) {
     block->padding_offset = 0;
 }
 
-// Helper function to find the actual end of BASIC data by parsing line structure
-// BASIC programs are stored as linked lines where each line starts with:
-//   [next_line_addr:2 bytes (little-endian)][line_number:2 bytes][line_text...][0x00]
-// When next_line_addr is 0x0000, it marks the end of the program
-// Returns the byte offset where actual BASIC data ends (including the 0x0000 marker)
-// Returns size if structure is invalid or truncated
+// Find end of BASIC program by parsing linked-line structure
+// Each line: [next_addr:2][line_num:2][text...][0x00]. 0x0000 marks end.
+// Skips 0xFF disk marker if present at start (handles malformed files)
 static size_t findBasicDataEnd(uint8_t *data, size_t block_size) {
     size_t pos = 0;
     
     // Safety check: block must have at least 2 bytes for an address
     if (block_size < 2) {
         return block_size;
+    }
+    
+    // Skip disk format marker if present at start (0xFF indicates disk tokenized BASIC)
+    // This handles malformed files where the marker is embedded in the data
+    if (data[0] == 0xFF && block_size > 1) {
+        pos = 1;
     }
     
     // Parse line-linked structure
