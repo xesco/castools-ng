@@ -176,7 +176,8 @@ static size_t findBasicDataEnd(uint8_t *data, size_t block_size) {
         
         // End-of-program marker: next address is 0x0000
         if (next_addr == 0x0000) {
-            // Include the 0x0000 marker itself plus any following 0x00 byte
+            // Return position after the 0x0000 marker (2 bytes)
+            // Everything after this position is padding
             return pos + 2;
         }
         
