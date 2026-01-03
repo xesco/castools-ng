@@ -329,6 +329,7 @@ static int cmd_convert(int argc, char *argv[]) {
     
     // Track which options were explicitly set (for preset override)
     bool explicit_baud = false;
+    bool explicit_sample = false;
     bool explicit_wave = false;
     bool explicit_amplitude = false;
     bool explicit_rise = false;
@@ -360,6 +361,7 @@ static int cmd_convert(int argc, char *argv[]) {
                 break;
             case 's':
                 sample_rate = atoi(optarg);
+                explicit_sample = true;
                 break;
             case 'w':
                 if (strcasecmp(optarg, "sine") == 0) {
@@ -460,6 +462,7 @@ static int cmd_convert(int argc, char *argv[]) {
         // Apply preset values only if not explicitly overridden
         if (!explicit_wave) waveform_type = profile->waveform;
         if (!explicit_baud) baud_rate = profile->baud_rate;
+        if (!explicit_sample) sample_rate = profile->sample_rate;
         if (!explicit_amplitude) amplitude = profile->amplitude;
         if (!explicit_rise) trapezoid_rise_percent = profile->trapezoid_rise_percent;
         if (!explicit_leader) {

@@ -69,6 +69,7 @@ int execute_profile(const char *profile_name, bool verbose) {
     }
     printf("\n");
     printf("  Baud rate:     %u baud\n", profile->baud_rate);
+    printf("  Sample rate:   %u Hz\n", profile->sample_rate);
     printf("  Amplitude:     %u\n", profile->amplitude);
     printf("  Leader timing: %.1fs / %.1fs (long/short)\n", 
            profile->long_silence, profile->short_silence);

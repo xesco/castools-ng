@@ -19,6 +19,7 @@ typedef struct {
     // Audio configuration
     WaveformType waveform;
     uint16_t baud_rate;
+    uint32_t sample_rate;
     uint8_t amplitude;
     uint8_t trapezoid_rise_percent;
     float long_silence;
