@@ -73,6 +73,17 @@ typedef struct {
     uint16_t baud_rate;             // MSX baud rate: 1200 (standard) or 2400 (turbo)
     const uint8_t *custom_samples;  // For WAVE_CUSTOM: pre-calculated samples
     size_t custom_length;           // Number of samples in custom waveform
+    
+    // Trapezoid wave settings (only used when type == WAVE_TRAPEZOID)
+    uint8_t trapezoid_rise_percent; // Rise/fall time as percentage (5, 10, 15, 20)
+    
+    // Silence/Leader timing settings (in seconds)
+    float long_silence;             // Silence before file header (default: 2.0s)
+    float short_silence;            // Silence before data blocks (default: 1.0s)
+    
+    // Low-pass filter settings
+    bool enable_lowpass;            // Enable low-pass filtering
+    uint16_t lowpass_cutoff_hz;     // Cutoff frequency in Hz (e.g., 6000)
 } WaveformConfig;
 
 // WAV file writer context (opaque to user)
@@ -81,6 +92,7 @@ typedef struct {
     WavFormat format;
     size_t sample_count;
     long data_chunk_pos;
+    double lowpass_state;  // Filter state (previous output sample)
 } WavWriter;
 
 // =============================================================================
@@ -95,6 +107,12 @@ WaveformConfig createDefaultWaveform(void);
 
 // Create custom waveform config with specific type
 WaveformConfig createWaveform(WaveformType type, uint8_t amplitude);
+
+// Set trapezoid rise time (only applies to WAVE_TRAPEZOID)
+// rise_percent: Rise/fall time as percentage of cycle (5, 10, 15, 20)
+//               Valid range: 1-50 (values outside are clamped)
+// Returns false if waveform type is not trapezoid
+bool setTrapezoidRiseTime(WaveformConfig *config, uint8_t rise_percent);
 
 // =============================================================================
 // Validation
@@ -119,6 +137,35 @@ bool closeWavFile(WavWriter *writer);
 // Write raw samples directly to WAV file
 // Returns false on error
 bool writeSamples(WavWriter *writer, const uint8_t *samples, size_t count);
+
+// =============================================================================
+// Audio Processing - Filters
+// =============================================================================
+
+// Apply a simple single-pole IIR low-pass filter to audio samples
+// This reduces high-frequency harmonics and smooths the waveform
+//
+// Parameters:
+//   samples: Array of 8-bit unsigned audio samples to filter (modified in-place)
+//   count: Number of samples in the array
+//   sample_rate: Sample rate in Hz (e.g., 43200)
+//   cutoff_hz: Cutoff frequency in Hz (e.g., 6000)
+//              Frequencies above this will be attenuated
+//   prev_output: Pointer to previous output sample (for filter state)
+//                Initialize to 128 (8-bit center) before first call
+//
+// The filter uses a simple first-order IIR (Infinite Impulse Response) formula:
+//   alpha = dt / (RC + dt)
+//   output[n] = alpha * input[n] + (1 - alpha) * output[n-1]
+//
+// Where RC = 1 / (2π * cutoff_hz)
+//
+// This creates a smooth roll-off starting at the cutoff frequency,
+// attenuating high frequencies while preserving the fundamental signal.
+//
+void applyLowPassFilter(uint8_t *samples, size_t count, 
+                        uint32_t sample_rate, uint16_t cutoff_hz,
+                        double *prev_output);
 
 // =============================================================================
 // Pulse Generation - Low Level

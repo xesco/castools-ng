@@ -3,6 +3,7 @@
 #include <string.h>
 #include <getopt.h>
 #include <stdbool.h>
+#include "lib/presetlib.h"
 #include "commands/commands.h"
 
 // Forward declarations for command handlers
@@ -11,6 +12,7 @@ static int cmd_info(int argc, char *argv[]);
 static int cmd_export(int argc, char *argv[]);
 static int cmd_doctor(int argc, char *argv[]);
 static int cmd_convert(int argc, char *argv[]);
+static int cmd_profile(int argc, char *argv[]);
 
 // Command structure
 typedef struct {
@@ -26,6 +28,7 @@ static const Command commands[] = {
     {"export", cmd_export, "Export file(s) from container"},
     {"doctor", cmd_doctor, "Check CAS file integrity"},
     {"convert", cmd_convert, "Convert CAS to WAV audio"},
+    {"profile", cmd_profile, "List or show audio profiles"},
     {NULL, NULL, NULL}
 };
 
@@ -86,15 +89,34 @@ static void print_convert_help(void) {
     printf("                          Must be divisible by 1200\n");
     printf("  -w, --wave <type>       Waveform type [default: sine]\n");
     printf("                          Types: sine, square, triangle, trapezoid\n");
+    printf("  -r, --rise <percent>    Trapezoid rise/fall time (requires --wave trapezoid)\n");
+    printf("                          Percentage of cycle: 1-50 [default: 10]\n");
+    printf("                          Lower = sharper edges, Higher = gentler slopes\n");
+    printf("  -t, --leader <preset>   Leader/silence timing preset [default: standard]\n");
+    printf("                          standard: 2.0s/1.0s (default, fast loading)\n");
+    printf("                          conservative: 3.0s/2.0s (more AGC/motor time)\n");
+    printf("                          extended: 5.0s/3.0s (maximum compatibility)\n");
+    printf("  -p, --preset <name>     Use predefined audio profile\n");
+    printf("                          Use 'cast profile' to list available presets\n");
+    printf("                          Individual options override preset values\n");
     printf("  -c, --channels <num>    Channels: 1 (mono) or 2 (stereo) [default: 1]\n");
     printf("  -d, --depth <bits>      Bit depth: 8 or 16 [default: 8]\n");
     printf("  -a, --amplitude <val>   Signal amplitude: 1-127 for 8-bit, 1-255 for 16-bit [default: 120]\n");
+    printf("  -l, --lowpass [freq]    Enable low-pass filter [default cutoff: 6000 Hz]\n");
+    printf("                          Reduces harmonics for cleaner playback from computer\n");
+    printf("                          Useful frequencies: 5000-7000 Hz (above max 4800 Hz signal)\n");
     printf("  -v, --verbose           Verbose output\n");
     printf("  -h, --help              Show this help message\n\n");
     printf("Examples:\n");
     printf("  cast convert game.cas game.wav\n");
     printf("  cast convert game.cas game.wav --baud 2400 --wave square\n");
     printf("  cast convert game.cas game.wav -s 44100 -a 100\n");
+    printf("  cast convert game.cas game.wav --lowpass\n");
+    printf("  cast convert game.cas game.wav --wave trapezoid --rise 20\n");
+    printf("  cast convert game.cas game.wav --leader conservative\n");
+    printf("  cast convert game.cas game.wav --preset computer-direct\n");
+    printf("  cast convert game.cas game.wav --preset msx1 --baud 2400\n");
+    printf("  cast convert game.cas game.wav --lowpass 5500 --wave trapezoid\n");
 }
 
 static int cmd_list(int argc, char *argv[]) {
@@ -291,13 +313,27 @@ static int cmd_doctor(int argc, char *argv[]) {
 static int cmd_convert(int argc, char *argv[]) {
     const char *input_file = NULL;
     const char *output_file = NULL;
+    const char *preset_name = NULL;
     uint16_t baud_rate = 1200;
     uint32_t sample_rate = 43200;
     WaveformType waveform_type = WAVE_SINE;
     uint16_t channels = 1;
     uint16_t bits_per_sample = 8;
     uint8_t amplitude = 120;
+    uint8_t trapezoid_rise_percent = 10;
+    float long_silence = 2.0f;   // Standard timing
+    float short_silence = 1.0f;
+    bool enable_lowpass = false;
+    uint16_t lowpass_cutoff_hz = 6000;
     bool verbose = false;
+    
+    // Track which options were explicitly set (for preset override)
+    bool explicit_baud = false;
+    bool explicit_wave = false;
+    bool explicit_amplitude = false;
+    bool explicit_rise = false;
+    bool explicit_leader = false;
+    bool explicit_lowpass = false;
 
     struct option long_options[] = {
         {"baud", required_argument, 0, 'b'},
@@ -306,16 +342,21 @@ static int cmd_convert(int argc, char *argv[]) {
         {"channels", required_argument, 0, 'c'},
         {"depth", required_argument, 0, 'd'},
         {"amplitude", required_argument, 0, 'a'},
+        {"rise", required_argument, 0, 'r'},
+        {"leader", required_argument, 0, 't'},
+        {"preset", required_argument, 0, 'p'},
+        {"lowpass", optional_argument, 0, 'l'},
         {"verbose", no_argument, 0, 'v'},
         {"help", no_argument, 0, 'h'},
         {0, 0, 0, 0}
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "b:s:w:c:d:a:vh", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "b:s:w:c:d:a:r:t:p:l::vh", long_options, NULL)) != -1) {
         switch (opt) {
             case 'b':
                 baud_rate = atoi(optarg);
+                explicit_baud = true;
                 break;
             case 's':
                 sample_rate = atoi(optarg);
@@ -334,6 +375,7 @@ static int cmd_convert(int argc, char *argv[]) {
                     fprintf(stderr, "Valid types: sine, square, triangle, trapezoid\n");
                     return 1;
                 }
+                explicit_wave = true;
                 break;
             case 'c':
                 channels = atoi(optarg);
@@ -343,6 +385,46 @@ static int cmd_convert(int argc, char *argv[]) {
                 break;
             case 'a':
                 amplitude = atoi(optarg);
+                explicit_amplitude = true;
+                break;
+            case 'r':
+                trapezoid_rise_percent = atoi(optarg);
+                if (trapezoid_rise_percent < 1 || trapezoid_rise_percent > 50) {
+                    fprintf(stderr, "Error: Rise time must be between 1 and 50%%\n");
+                    return 1;
+                }
+                explicit_rise = true;
+                break;
+            case 't':
+                if (strcasecmp(optarg, "standard") == 0) {
+                    long_silence = 2.0f;
+                    short_silence = 1.0f;
+                } else if (strcasecmp(optarg, "conservative") == 0) {
+                    long_silence = 3.0f;
+                    short_silence = 2.0f;
+                } else if (strcasecmp(optarg, "extended") == 0) {
+                    long_silence = 5.0f;
+                    short_silence = 3.0f;
+                } else {
+                    fprintf(stderr, "Error: Unknown leader preset '%s'\n", optarg);
+                    fprintf(stderr, "Valid presets: standard, conservative, extended\n");
+                    return 1;
+                }
+                explicit_leader = true;
+                break;
+            case 'p':
+                preset_name = optarg;
+                break;
+            case 'l':
+                enable_lowpass = true;
+                explicit_lowpass = true;
+                if (optarg) {
+                    lowpass_cutoff_hz = atoi(optarg);
+                    if (lowpass_cutoff_hz == 0) {
+                        fprintf(stderr, "Error: Invalid lowpass cutoff frequency\n");
+                        return 1;
+                    }
+                }
                 break;
             case 'v':
                 verbose = true;
@@ -366,8 +448,46 @@ static int cmd_convert(int argc, char *argv[]) {
     input_file = argv[optind];
     output_file = argv[optind + 1];
 
+    // Apply preset if specified
+    if (preset_name) {
+        const AudioProfile *profile = findProfile(preset_name);
+        if (!profile) {
+            fprintf(stderr, "Error: Unknown preset '%s'\n", preset_name);
+            fprintf(stderr, "Use 'cast profile' to list available presets.\n");
+            return 1;
+        }
+        
+        // Apply preset values only if not explicitly overridden
+        if (!explicit_wave) waveform_type = profile->waveform;
+        if (!explicit_baud) baud_rate = profile->baud_rate;
+        if (!explicit_amplitude) amplitude = profile->amplitude;
+        if (!explicit_rise) trapezoid_rise_percent = profile->trapezoid_rise_percent;
+        if (!explicit_leader) {
+            long_silence = profile->long_silence;
+            short_silence = profile->short_silence;
+        }
+        if (!explicit_lowpass) {
+            enable_lowpass = profile->enable_lowpass;
+            lowpass_cutoff_hz = profile->lowpass_cutoff_hz;
+        }
+        
+        if (verbose) {
+            printf("Using preset: %s\n", profile->name);
+            printf("  %s\n\n", profile->short_desc);
+        }
+    }
+
+    // Validate that --rise is only used with trapezoid waveform
+    if (trapezoid_rise_percent != 10 && waveform_type != WAVE_TRAPEZOID) {
+        fprintf(stderr, "Error: --rise option requires --wave trapezoid\n");
+        return 1;
+    }
+
     return execute_convert(input_file, output_file, baud_rate, sample_rate,
-                          waveform_type, channels, bits_per_sample, amplitude, verbose);
+                          waveform_type, channels, bits_per_sample, amplitude,
+                          trapezoid_rise_percent,
+                          long_silence, short_silence,
+                          enable_lowpass, lowpass_cutoff_hz, verbose);
 }
 
 int main(int argc, char *argv[]) {
@@ -398,4 +518,54 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Error: Unknown command '%s'\n", cmd_name);
     fprintf(stderr, "Run '%s --help' for usage.\n", argv[0]);
     return 1;
+}
+
+static void print_profile_help(void) {
+    printf("Usage: cast profile [<name>] [options]\n\n");
+    printf("List or display audio profile presets.\n\n");
+    printf("Without arguments:\n");
+    printf("  Lists all available profiles with short descriptions\n\n");
+    printf("With profile name:\n");
+    printf("  Shows detailed information about the specified profile\n\n");
+    printf("Options:\n");
+    printf("  -v, --verbose           Show command examples\n");
+    printf("  -h, --help              Show this help message\n\n");
+    printf("Examples:\n");
+    printf("  cast profile                    # List all profiles\n");
+    printf("  cast profile computer-direct    # Show details for computer-direct\n");
+    printf("  cast profile msx1 -v            # Show details with examples\n");
+}
+
+static int cmd_profile(int argc, char *argv[]) {
+    const char *profile_name = NULL;
+    bool verbose = false;
+    
+    struct option long_options[] = {
+        {"verbose", no_argument, 0, 'v'},
+        {"help", no_argument, 0, 'h'},
+        {0, 0, 0, 0}
+    };
+    
+    int opt;
+    optind = 1;  // Reset getopt
+    while ((opt = getopt_long(argc, argv, "vh", long_options, NULL)) != -1) {
+        switch (opt) {
+            case 'v':
+                verbose = true;
+                break;
+            case 'h':
+                print_profile_help();
+                return 0;
+            default:
+                print_profile_help();
+                return 1;
+        }
+    }
+    
+    // Get profile name if provided
+    if (optind < argc) {
+        profile_name = argv[optind];
+    }
+    
+    return execute_profile(profile_name, verbose);
 }

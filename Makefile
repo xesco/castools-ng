@@ -7,10 +7,12 @@ SRCS = cast.c \
        commands/export.c \
        commands/doctor.c \
        commands/convert.c \
+       commands/profile.c \
        lib/caslib.c \
        lib/printlib.c \
        lib/cmdlib.c \
-       lib/wavlib.c
+       lib/wavlib.c \
+       lib/presetlib.c
 
 OBJS = $(SRCS:.c=.o)
 

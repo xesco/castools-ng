@@ -70,6 +70,9 @@ int execute_convert(const char *input_file, const char *output_file,
                     uint16_t baud_rate, uint32_t sample_rate, 
                     WaveformType waveform_type, uint16_t channels,
                     uint16_t bits_per_sample, uint8_t amplitude,
+                    uint8_t trapezoid_rise_percent,
+                    float long_silence, float short_silence,
+                    bool enable_lowpass, uint16_t lowpass_cutoff_hz,
                     bool verbose) {
     
     // Validate all parameters
@@ -97,9 +100,17 @@ int execute_convert(const char *input_file, const char *output_file,
             case WAVE_SINE: printf("sine\n"); break;
             case WAVE_SQUARE: printf("square\n"); break;
             case WAVE_TRIANGLE: printf("triangle\n"); break;
-            case WAVE_TRAPEZOID: printf("trapezoid\n"); break;
+            case WAVE_TRAPEZOID: 
+                printf("trapezoid (rise: %u%%)\n", trapezoid_rise_percent); 
+                break;
             default: printf("unknown\n"); break;
         }
+        printf("  Low-pass:      %s", enable_lowpass ? "enabled" : "disabled");
+        if (enable_lowpass) {
+            printf(" (cutoff: %u Hz)", lowpass_cutoff_hz);
+        }
+        printf("\n");
+        printf("  Leader timing: %.1fs / %.1fs (long/short)\n", long_silence, short_silence);
         printf("\n");
     }
     
@@ -122,6 +133,11 @@ int execute_convert(const char *input_file, const char *output_file,
     waveform.baud_rate = baud_rate;
     waveform.custom_samples = NULL;
     waveform.custom_length = 0;
+    waveform.trapezoid_rise_percent = trapezoid_rise_percent;
+    waveform.long_silence = long_silence;
+    waveform.short_silence = short_silence;
+    waveform.enable_lowpass = enable_lowpass;
+    waveform.lowpass_cutoff_hz = lowpass_cutoff_hz;
     
     // Read and verify CAS file first
     size_t file_size;
