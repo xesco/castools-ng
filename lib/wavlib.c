@@ -316,16 +316,6 @@ WavWriter* createWavFile(const char *filename, const WavFormat *format) {
 // Cue Chunk Writing
 // =============================================================================
 
-// Get category name for marker label
-static const char* getCategoryName(MarkerCategory category) {
-    switch (category) {
-        case MARKER_STRUCTURE: return "STRUCTURE";
-        case MARKER_DETAIL: return "DETAIL";
-        case MARKER_VERBOSE: return "VERBOSE";
-        default: return "UNKNOWN";
-    }
-}
-
 // Write cue chunk with marker positions
 static bool writeCueChunk(FILE *file, const MarkerList *markers) {
     if (!file || !markers || markers->count == 0) {
@@ -369,9 +359,8 @@ static bool writeAdtlChunk(FILE *file, const MarkerList *markers) {
     // Calculate total size of all labels
     uint32_t labels_size = 0;
     for (size_t i = 0; i < markers->count; i++) {
-        // Format: "[CATEGORY] description"
-        const char *cat_name = getCategoryName(markers->markers[i].category);
-        size_t text_len = strlen(cat_name) + 3 + strlen(markers->markers[i].description) + 1; // "[CAT] desc\0"
+        // Use description directly without category prefix
+        size_t text_len = strlen(markers->markers[i].description) + 1; // "desc\0"
         
         // Each label chunk: "labl" (4) + size (4) + cue_id (4) + text (padded to even)
         size_t label_chunk_size = 12 + ((text_len + 1) & ~1);  // Pad to even
@@ -390,11 +379,8 @@ static bool writeAdtlChunk(FILE *file, const MarkerList *markers) {
     
     // Write each label
     for (size_t i = 0; i < markers->count; i++) {
-        // Format label text with category
-        char label_text[300];
-        const char *cat_name = getCategoryName(markers->markers[i].category);
-        snprintf(label_text, sizeof(label_text), "[%s] %s", 
-                cat_name, markers->markers[i].description);
+        // Use description directly without category prefix
+        const char *label_text = markers->markers[i].description;
         
         size_t text_len = strlen(label_text) + 1;  // Include null terminator
         size_t padded_len = (text_len + 1) & ~1;   // Pad to even length

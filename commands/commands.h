@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include "../lib/wavlib.h"
 
-int execute_list(const char *input_file, bool extended, int filter_index, bool verbose);
+int execute_list(const char *input_file, bool extended, int filter_index, bool show_markers, bool verbose);
 int execute_info(const char *input_file, bool verbose);
 int execute_export(const char *input_file, int filter_index, const char *output_dir, bool force, bool verbose, bool disk_format);
 int execute_convert(const char *input_file, const char *output_file,

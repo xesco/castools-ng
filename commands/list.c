@@ -5,8 +5,44 @@
 #include "../lib/caslib.h"
 #include "../lib/printlib.h"
 #include "../lib/cmdlib.h"
+#include "../lib/playlib.h"
 
-int execute_list(const char *input_file, bool extended, int filter_index, bool verbose) {
+int execute_list(const char *input_file, bool extended, int filter_index, bool show_markers, bool verbose) {
+    // Check if we should show WAV markers instead of CAS listing
+    if (show_markers) {
+        if (verbose) {
+            printf("Reading WAV markers from: %s\n\n", input_file);
+        }
+        
+        MarkerListInfo *markers = readWavMarkers(input_file);
+        if (!markers || markers->count == 0) {
+            fprintf(stderr, "Error: No markers found in WAV file\n");
+            if (markers) {
+                free(markers->markers);
+                free(markers);
+            }
+            return 1;
+        }
+        
+        printf("WAV File Markers (%zu total)\n", markers->count);
+        for (size_t i = 0; i < markers->count; i++) {
+            const MarkerInfo *m = &markers->markers[i];
+            
+            // Format time as MM:SS.mmm
+            int minutes = (int)(m->time_seconds / 60);
+            double seconds = m->time_seconds - (minutes * 60);
+            
+            printf("%4zu. %2d:%06.3f - %s\n", 
+                   i + 1, minutes, seconds, m->description);
+        }
+        printf("Total markers: %zu\n", markers->count);
+        
+        free(markers->markers);
+        free(markers);
+        return 0;
+    }
+    
+    // Original CAS listing functionality
     if (verbose) {
         printf("Reading file: %s\n", input_file);
     }

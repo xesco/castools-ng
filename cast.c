@@ -43,12 +43,17 @@ static void print_usage(const char *prog_name) {
 }
 
 static void print_list_help(void) {
-    printf("Usage: cast list <file.cas> [options]\n\n");
+    printf("Usage: cast list <file.cas|file.wav> [options]\n\n");
     printf("Options:\n");
     printf("  -e, --extended      Show extended information (sizes, headers, data, etc..)\n");
     printf("  -i, --index <num>   Show only specific file by index (1-based, requires -e/--extended)\n");
+    printf("  -m, --markers       List WAV file markers with timing\n");
     printf("  -v, --verbose       Verbose output\n");
     printf("  -h, --help          Show this help message\n");
+    printf("\n");
+    printf("Examples:\n");
+    printf("  cast list game.cas       # List CAS file contents\n");
+    printf("  cast list -m game.wav    # List WAV markers with timing\n");
 }
 
 static void print_info_help(void) {
@@ -117,11 +122,13 @@ static int cmd_list(int argc, char *argv[]) {
     const char *input_file = NULL;
     int filter_index = 0;
     bool extended = false;
+    bool show_markers = false;
     bool verbose = false;
 
     struct option long_options[] = {
         {"extended", no_argument, 0, 'e'},
         {"index", required_argument, 0, 'i'},
+        {"markers", no_argument, 0, 'm'},
         {"verbose", no_argument, 0, 'v'},
         {"help", no_argument, 0, 'h'},
         {0, 0, 0, 0}
@@ -129,13 +136,16 @@ static int cmd_list(int argc, char *argv[]) {
 
     int opt;
     optind = 1; // Reset getopt
-    while ((opt = getopt_long(argc, argv, "ei:vh", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "ei:mvh", long_options, NULL)) != -1) {
         switch (opt) {
             case 'e':
                 extended = true;
                 break;
             case 'i':
                 filter_index = atoi(optarg);
+                break;
+            case 'm':
+                show_markers = true;
                 break;
             case 'v':
                 verbose = true;
@@ -162,7 +172,7 @@ static int cmd_list(int argc, char *argv[]) {
     }
 
     // Execute the list command
-    return execute_list(input_file, extended, filter_index, verbose);
+    return execute_list(input_file, extended, filter_index, show_markers, verbose);
 }
 
 static int cmd_info(int argc, char *argv[]) {

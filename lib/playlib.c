@@ -62,14 +62,19 @@ typedef struct {
 // =============================================================================
 
 static MarkerCategory parseCategory(const char *description) {
-    if (strncmp(description, "[STRUCTURE]", 11) == 0) {
+    // Since we no longer embed category in description, infer from content
+    // STRUCTURE markers: File markers, headers, data blocks
+    // DETAIL markers: Silence, sync, end of tape
+    
+    if (strstr(description, "File ") && strstr(description, ":")) {
+        return MARKER_STRUCTURE;  // "File 1/5: ASCII 'name'"
+    } else if (strstr(description, "File header")) {
         return MARKER_STRUCTURE;
-    } else if (strncmp(description, "[DETAIL]", 8) == 0) {
-        return MARKER_DETAIL;
-    } else if (strncmp(description, "[VERBOSE]", 9) == 0) {
-        return MARKER_VERBOSE;
+    } else if (strstr(description, "Data block")) {
+        return MARKER_STRUCTURE;
     }
-    return MARKER_DETAIL;  // Default
+    
+    return MARKER_DETAIL;  // Silence, Sync, End of tape, etc.
 }
 
 // =============================================================================
