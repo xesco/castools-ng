@@ -99,37 +99,6 @@ char* buildFilePath(const char *dir, const char *filename) {
     return path;
 }
 
-char* generateFilename(const cas_File *file, int index) {
-    // Determine extension based on file type
-    const char *ext = isAsciiFile(file->file_header.file_type) ? "asc" :
-                      isBinaryFile(file->file_header.file_type) ? "bin" :
-                      isBasicFile(file->file_header.file_type) ? "bas" : "dat";
-    
-    char *filename = malloc(256);
-    if (!filename) return NULL;
-    
-    // Custom blocks don't have valid file headers
-    if (file->is_custom) {
-        snprintf(filename, 256, "%d-custom.%s", index, ext);
-        return filename;
-    }
-    
-    // Extract and trim filename from header (6 chars, space-padded at end)
-    char base_name[7];
-    memcpy(base_name, file->file_header.file_name, 6);
-    base_name[6] = '\0';
-    
-    // Trim trailing spaces
-    char *end = base_name + 5;
-    while (end >= base_name && *end == ' ') *end-- = '\0';
-    
-    // Format filename: index-name.ext or index.ext if name is empty
-    snprintf(filename, 256, *base_name ? "%d-%s.%s" : "%d.%s", 
-             index, *base_name ? base_name : ext, ext);
-    
-    return filename;
-}
-
 // Helper function to write a 16-bit value in little-endian format
 static inline void write_le16(uint8_t *dest, uint16_t value) {
     dest[0] = value & 0xFF;

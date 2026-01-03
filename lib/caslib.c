@@ -1,4 +1,5 @@
 #include "caslib.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -7,12 +8,10 @@ const uint8_t FILETYPE_ASCII[10]  = {0xEA, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA, 0xEA, 0
 const uint8_t FILETYPE_BINARY[10] = {0xD0, 0xD0, 0xD0, 0xD0, 0xD0, 0xD0, 0xD0, 0xD0, 0xD0, 0xD0};
 const uint8_t FILETYPE_BASIC[10]  = {0xD3, 0xD3, 0xD3, 0xD3, 0xD3, 0xD3, 0xD3, 0xD3, 0xD3, 0xD3};
 
-// Helper to check if there's enough data to read
 static bool hasBytesAvailable(size_t pos, size_t needed, size_t total_length) {
     return pos + needed <= total_length;
 }
 
-// Helper to read a little-endian 16-bit value
 static uint16_t readLittleEndian16(const uint8_t *data) {
     return data[0] | (data[1] << 8);
 }
@@ -33,7 +32,6 @@ static bool readCasHeader(uint8_t *data, size_t *pos, cas_Header *header, size_t
     return true;
 }
 
-// Helper function to check if CAS header exists and read it
 static bool tryReadCasHeader(uint8_t *data, size_t *pos, cas_Header *header, size_t length) {
     if (!isCasHeader(data, pos, length)) {
         return false;
@@ -90,6 +88,36 @@ const char* getFileTypeString(const cas_File *file) {
     }
 }
 
+char* generateFilename(const cas_File *file, int index) {
+    const char *ext = isAsciiFile(file->file_header.file_type) ? "asc" :
+                      isBinaryFile(file->file_header.file_type) ? "bin" :
+                      isBasicFile(file->file_header.file_type) ? "bas" : "dat";
+    
+    char *filename = malloc(256);
+    if (!filename) return NULL;
+    
+    // Custom blocks don't have valid file headers
+    if (file->is_custom) {
+        snprintf(filename, 256, "%d-custom.%s", index, ext);
+        return filename;
+    }
+    
+    // Extract and trim filename from header (6 chars, space-padded at end)
+    char base_name[7];
+    memcpy(base_name, file->file_header.file_name, 6);
+    base_name[6] = '\0';
+    
+    // Trim trailing spaces
+    char *end = base_name + 5;
+    while (end >= base_name && *end == ' ') *end-- = '\0';
+    
+    // Format filename: index-name.ext or index.ext if name is empty
+    snprintf(filename, 256, *base_name ? "%d-%s.%s" : "%d.%s", 
+             index, *base_name ? base_name : ext, ext);
+    
+    return filename;
+}
+
 static bool readDataBlockHeader(uint8_t *data, size_t *pos, cas_DataBlockHeader *data_block_header, size_t length) {
     if (!hasBytesAvailable(*pos, sizeof(cas_DataBlockHeader), length)) {
         return false;
@@ -104,17 +132,15 @@ static bool readDataBlockHeader(uint8_t *data, size_t *pos, cas_DataBlockHeader 
 }
 
 static size_t findNextCasHeader(uint8_t *data, size_t start_pos, size_t length) {
-    // Round up to next 8-byte boundary for efficiency
-    // CAS headers are always at 8-byte aligned positions
+    // CAS headers are 8-byte aligned, round up to next boundary
     size_t aligned_pos = (start_pos + 7) & ~7;
 
-    // Search for next CAS header at 8-byte boundaries
     for (size_t i = aligned_pos; i + 8 <= length; i += 8) {
-        if (isCasHeader(data, &i, length)) {
+        if (memcmp(data + i, CAS_HEADER, 8) == 0) {
             return i;
         }
     }
-    return length; // No header found, return end of data
+    return length;
 }
 
 static bool expandArray(void **array, size_t *capacity, size_t item_size) {
@@ -138,7 +164,6 @@ static void* allocateArray(size_t capacity, size_t item_size) {
     return array;
 }
 
-// Helper function to allocate a single data block for a file
 static bool allocateDataBlock(cas_File *file, const char *error_msg) {
     file->data_blocks = malloc(sizeof(cas_DataBlock));
     if (!file->data_blocks) {
@@ -149,58 +174,6 @@ static bool allocateDataBlock(cas_File *file, const char *error_msg) {
     return true;
 }
 
-// Helper to initialize data block with no padding
-static void initializeDataBlockNoPadding(cas_DataBlock *block) {
-    block->padding = NULL;
-    block->padding_size = 0;
-    block->padding_offset = 0;
-}
-
-// Find end of BASIC program by parsing linked-line structure
-// Each line: [next_addr:2][line_num:2][text...][0x00]. 0x0000 marks end.
-// Skips 0xFF disk marker if present at start (handles malformed files)
-static size_t findBasicDataEnd(uint8_t *data, size_t block_size) {
-    size_t pos = 0;
-    
-    // Safety check: block must have at least 2 bytes for an address
-    if (block_size < 2) {
-        return block_size;
-    }
-    
-    // Skip disk format marker if present at start (0xFF indicates disk tokenized BASIC)
-    // This handles malformed files where the marker is embedded in the data
-    if (data[0] == 0xFF && block_size > 1) {
-        pos = 1;
-    }
-    
-    // Parse line-linked structure
-    while (pos + 2 <= block_size) {
-        uint16_t next_addr = readLittleEndian16(data + pos);
-        
-        // End-of-program marker: next address is 0x0000
-        if (next_addr == 0x0000) {
-            // Return position after the 0x0000 marker (2 bytes)
-            // Everything after this position is padding
-            return pos + 2;
-        }
-        
-        // Validate that next_addr points to a location within the block
-        if (next_addr <= pos || next_addr > block_size) {
-            // Invalid structure - link points beyond block or backwards
-            // Return current position as end of valid data
-            return pos;
-        }
-        
-        // Jump to next line
-        pos = next_addr;
-    }
-    
-    // Reached end of block without finding 0x0000 marker
-    // Return entire block as data (shouldn't happen with valid BASIC)
-    return block_size;
-}
-
-// Helper function to read CAS header for a data block
 static bool readDataBlockCasHeader(uint8_t *data, cas_File *file, size_t *pos, size_t length, const char *error_msg) {
     if (!isCasHeader(data, pos, length)) {
         free(file->data_blocks);
@@ -216,7 +189,6 @@ static bool readDataBlockCasHeader(uint8_t *data, cas_File *file, size_t *pos, s
     return true;
 }
 
-// Helper function to allocate and copy data into a data block
 static bool allocateAndCopyData(cas_DataBlock *block, uint8_t *source, size_t data_size, size_t data_offset, const char *error_msg) {
     block->data = malloc(data_size);
     block->data_size = data_size;
@@ -229,46 +201,26 @@ static bool allocateAndCopyData(cas_DataBlock *block, uint8_t *source, size_t da
     return true;
 }
 
-// Helper function to allocate and copy padding into a data block
-static bool allocateAndCopyPadding(cas_DataBlock *block, uint8_t *source, size_t padding_size, size_t padding_offset, const char *error_msg) {
-    block->padding_size = padding_size;
-    block->padding_offset = padding_offset;
-    
-    if (padding_size > 0) {
-        block->padding = malloc(padding_size);
-        if (!block->padding) {
-            fprintf(stderr, "Failed to allocate memory for %s padding\n", error_msg);
-            return false;
-        }
-        memcpy(block->padding, source, padding_size);
-    } else {
-        block->padding = NULL;
-    }
-    return true;
-}
+
 
 static bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) {
     size_t block_count = 0;
     size_t capacity = 5;
     size_t total_data_size = 0;
-    size_t total_padding_size = 0;
     bool eof_found = false;
 
-    // Allocate initial array for data blocks
     file->data_blocks = allocateArray(capacity, sizeof(cas_DataBlock));
     if (!file->data_blocks) {
         fprintf(stderr, "Failed to allocate memory for ASCII data blocks\n");
         return false;
     }
 
-    // Read data blocks until EOF marker is found
-    while (!eof_found) {
-        // Find and read next CAS header (for the data block)
+    // Read blocks separated by CAS headers until EOF marker (0x1A)
+    while (!eof_found && *pos < length) {
         if (!tryReadCasHeader(data, pos, &file->data_blocks[block_count].header, length)) {
-            break; // No more blocks
+            break;
         }
 
-        // Check if we need to resize the array
         if (block_count >= capacity) {
             if (!expandArray((void**)&file->data_blocks, &capacity, sizeof(cas_DataBlock))) {
                 fprintf(stderr, "Failed to expand memory for ASCII data blocks\n");
@@ -276,44 +228,33 @@ static bool parseAsciiFile(uint8_t *data, cas_File *file, size_t *pos, size_t le
             }
         }
 
-        // Find the size of this data block by searching for next header
         size_t block_start = *pos;
-        size_t block_end = findNextCasHeader(data, block_start, length);
-        size_t block_size = block_end - block_start;
-
-        // Find EOF marker (0x1A) to separate data from padding
-        uint8_t *eof_ptr = memchr(data + *pos, 0x1A, block_size);
-        size_t data_size = eof_ptr ? (size_t)(eof_ptr - (data + *pos)) : block_size;
-
-        if (eof_ptr) {
-            eof_found = true;
+        
+        while (*pos < length && !isCasHeader(data, pos, length)) {
+            if (data[*pos] == 0x1A) {
+                eof_found = true;
+                (*pos)++;
+                // Skip remaining bytes until next header
+                while (*pos < length && !isCasHeader(data, pos, length)) {
+                    (*pos)++;
+                }
+                break;
+            }
+            (*pos)++;
         }
-
-        // Allocate and copy data (excluding EOF marker)
-        if (!allocateAndCopyData(&file->data_blocks[block_count], data + *pos, data_size, *pos, "ASCII data block")) {
+        
+        size_t block_size = *pos - block_start;
+        if (!allocateAndCopyData(&file->data_blocks[block_count], data + block_start, block_size, block_start, "ASCII data block")) {
             free(file->data_blocks);
             return false;
         }
-        total_data_size += data_size;
-
-        // Allocate and copy padding (EOF marker and everything after)
-        size_t padding_size = block_size - data_size;
-        total_padding_size += padding_size;
-        if (!allocateAndCopyPadding(&file->data_blocks[block_count], data + *pos + data_size, padding_size, *pos + data_size, "ASCII data block")) {
-            free(file->data_blocks[block_count].data);
-            free(file->data_blocks);
-            return false;
-        }
-
-        *pos += block_size;
+        total_data_size += block_size;
         block_count++;
     }
 
-    // Store total data size including padding
-    // file->data_size represents the total block size (data + padding) for all blocks
-    file->data_size = total_data_size + total_padding_size;
+    file->data_size = total_data_size;
     file->data_block_count = block_count;
-    return eof_found; // Return true only if we found EOF marker
+    return eof_found;
 }
 
 static bool parseBasicFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) {
@@ -325,34 +266,17 @@ static bool parseBasicFile(uint8_t *data, cas_File *file, size_t *pos, size_t le
         return false;
     }
 
-    // BASIC files don't have a 6-byte address header (unlike BINARY) - just raw tokenized data after the CAS header
-    // Parse the line-linked structure to find where actual data ends
-    // BASIC programs have 0x0000 as the end-of-program marker to separate data from tape padding
+    // BASIC files have raw tokenized data (no 6-byte header like BINARY)
     size_t data_start = *pos;
     size_t next_header_pos = findNextCasHeader(data, *pos, length);
-    size_t total_size = next_header_pos - data_start;
-    
-    // Find actual data end by parsing BASIC line structure (follows link pointers)
-    size_t data_size = findBasicDataEnd(data + *pos, total_size);
-    size_t padding_size = total_size - data_size;
-
-    // Allocate and read the program data
+    size_t data_size = next_header_pos - data_start;
     if (!allocateAndCopyData(&file->data_blocks[0], data + *pos, data_size, *pos, "basic data block")) {
         free(file->data_blocks);
         return false;
     }
     *pos += data_size;
 
-    // Handle padding
-    if (!allocateAndCopyPadding(&file->data_blocks[0], data + *pos, padding_size, *pos, "basic")) {
-        free(file->data_blocks[0].data);
-        free(file->data_blocks);
-        return false;
-    }
-    *pos += padding_size;
-
-    // file->data_size = total block size (data + padding) for export/display
-    file->data_size = data_size + padding_size;
+    file->data_size = data_size;
     return true;
 }
 
@@ -365,56 +289,38 @@ static bool parseBinaryFile(uint8_t *data, cas_File *file, size_t *pos, size_t l
         return false;
     }
 
-    // Read the data block header (little endian - load/end/exec addresses)
-    // Note: This 6-byte header will be included in file->data_size calculation below
+    // Read 6-byte data block header (load/end/exec addresses)
     if (!readDataBlockHeader(data, pos, &file->data_block_header, length)) {
         free(file->data_blocks);
         fprintf(stderr, "Failed to read data block header for binary data block\n");
         return false;
     }
 
-    // With the addresses compute file size: end address - load address + 1
-    // (the +1 includes the end address byte itself)
-    size_t data_size = file->data_block_header.end_address - file->data_block_header.load_address + 1;
+    // Find data size by scanning for next CAS header (end_address field is unreliable)
+    size_t data_start = *pos;
+    size_t next_header_pos = findNextCasHeader(data, *pos, length);
+    size_t data_size = next_header_pos - data_start;
 
-    // Check if we have enough data
     if (*pos + data_size > length) {
         free(file->data_blocks);
         fprintf(stderr, "Not enough data for binary data block\n");
         return false;
     }
 
-    // Allocate and read the program data
     if (!allocateAndCopyData(&file->data_blocks[0], data + *pos, data_size, *pos, "binary data block")) {
         free(file->data_blocks);
         return false;
     }
     *pos += data_size;
 
-    // Find next CAS header to determine actual padding
-    size_t next_header_pos = findNextCasHeader(data, *pos, length);
-    size_t padding_size = next_header_pos - *pos;
-
-    // Allocate and copy padding
-    if (!allocateAndCopyPadding(&file->data_blocks[0], data + *pos, padding_size, *pos, "binary")) {
-        free(file->data_blocks[0].data);
-        free(file->data_blocks);
-        return false;
-    }
-    *pos += padding_size;
-
-    // file->data_size = total block size (6-byte header + data + padding)
-    file->data_size = 6 + data_size + padding_size;  // 6 bytes for data block header + actual data + padding
+    file->data_size = 6 + data_size;  // 6-byte header + data
     return true;
 }
 
 static bool parseCustomFile(uint8_t *data, cas_File *file, size_t *pos, size_t length) {
-    // For custom blocks, just read raw data until next CAS_HEADER
     file->is_custom = true;
     size_t start_pos = *pos;
 
-    // Find next CAS_HEADER or end of file
-    // file->data_size = total block size for custom blocks
     size_t next_header_pos = findNextCasHeader(data, *pos, length);
     file->data_size = next_header_pos - start_pos;
 
@@ -422,12 +328,10 @@ static bool parseCustomFile(uint8_t *data, cas_File *file, size_t *pos, size_t l
         return false;
     }
 
-    // Allocate and copy the custom data
     if (!allocateAndCopyData(&file->data_blocks[0], data + *pos, file->data_size, *pos, "custom")) {
         free(file->data_blocks);
         return false;
     }
-    initializeDataBlockNoPadding(&file->data_blocks[0]);
     file->data_block_count = 1;
 
     *pos = next_header_pos;
@@ -442,26 +346,22 @@ static bool parseFile(uint8_t *data, cas_File *file, size_t *pos, size_t length)
         return false;
     }
 
-    // Peek at file type to determine parser
     uint8_t file_type[10];
     if (!peekFileType(data, *pos, file_type, length)) {
         fprintf(stderr, "Truncated data: not enough bytes for file type\n");
         return false;
     }
 
-    // Check if it matches a known file type
     bool is_ascii  = isAsciiFile(file_type);
     bool is_binary = isBinaryFile(file_type);
     bool is_basic  = isBasicFile(file_type);
 
-    // If it matches a known type, read the full file header
     if (is_ascii || is_binary || is_basic) {
         if (!readFileHeader(data, pos, &file->file_header, length)) {
             fprintf(stderr, "Failed to read file header\n");
             return false;
         }
 
-        // Check file type and use appropriate parser
         if (is_binary) {
             if (!parseBinaryFile(data, file, pos, length)) {
                 fprintf(stderr, "Failed to parse binary file\n");
@@ -483,7 +383,6 @@ static bool parseFile(uint8_t *data, cas_File *file, size_t *pos, size_t length)
         }
     }
 
-    // Unknown type - treat as custom block
     return parseCustomFile(data, file, pos, length);
 }
 
@@ -492,16 +391,13 @@ bool parseCasContainer(uint8_t *data, cas_Container *container, size_t length) {
     size_t capacity = 5;
     container->file_count = 0;
 
-    // Allocate initial array for files
     container->files = allocateArray(capacity, sizeof(cas_File));
     if (!container->files) {
         fprintf(stderr, "Failed to allocate memory for CAS container files\n");
         return false;
     }
 
-    // Parse files while we can find CAS headers
     while (pos < length && isCasHeader(data, &pos, length)) {
-        // Check if we need to resize the array
         if (container->file_count >= capacity) {
             if (!expandArray((void**)&container->files, &capacity, sizeof(cas_File))) {
                 return false;
@@ -509,7 +405,6 @@ bool parseCasContainer(uint8_t *data, cas_Container *container, size_t length) {
         }
 
         if (!parseFile(data, &container->files[container->file_count], &pos, length)) {
-            // Not a valid file, stop parsing
             fprintf(stderr, "Failed to parse file at position %zu\n", pos);
             break;
         }

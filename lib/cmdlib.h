@@ -21,10 +21,6 @@ bool createDirectory(const char *path);
 // Returns allocated string that must be freed by caller
 char* buildFilePath(const char *dir, const char *filename);
 
-// Generate filename from CAS file structure
-// Returns allocated string that must be freed by caller
-char* generateFilename(const cas_File *file, int index);
-
 // Write CAS file data to disk
 // disk_format: if true, add MSX-DOS prefix (0xFE/0xFF) for BINARY/BASIC files
 bool writeFileData(const char *filename, const cas_File *file, bool verbose, bool disk_format);

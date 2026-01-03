@@ -30,10 +30,7 @@ typedef struct {
     cas_Header header;
     uint8_t* data;
     size_t data_size;
-    uint8_t* padding;
-    size_t padding_size;
     size_t data_offset;      // offset in file where data starts
-    size_t padding_offset;   // offset in file where padding starts
 } cas_DataBlock;
 
 typedef struct {
@@ -62,6 +59,7 @@ bool isAsciiFile(const uint8_t *file_type);
 bool isBinaryFile(const uint8_t *file_type);
 bool isBasicFile(const uint8_t *file_type);
 const char* getFileTypeString(const cas_File *file);
+char* generateFilename(const cas_File *file, int index);
 bool parseCasContainer(uint8_t *data, cas_Container *container, size_t length);
 
 #endif // CASLIB_H

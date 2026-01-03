@@ -82,19 +82,12 @@ void printDataBlockHeader(const cas_DataBlockHeader *data_block_header) {
 
 void printDataBlock(const cas_DataBlock *data_block, size_t block_num) {
     printf("  Data Block #%zu:\n", block_num);
-    printf("    Data Size:    %zu bytes\n", data_block->data_size);
-    printf("    Padding Size: %zu bytes\n", data_block->padding_size);
+    printf("    Data Size: %zu bytes\n", data_block->data_size);
     
     if (data_block->data_size > 0) {
         printf("\n");
         printf("    Data:\n");
         printHexDump(data_block->data, data_block->data_size, data_block->data_offset);
-    }
-    
-    if (data_block->padding_size > 0) {
-        printf("\n");
-        printf("    Padding:\n");
-        printHexDump(data_block->padding, data_block->padding_size, data_block->padding_offset);
     }
 }
 

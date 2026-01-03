@@ -6,9 +6,11 @@ SRCS = cast.c \
        commands/list.c \
        commands/export.c \
        commands/doctor.c \
+       commands/convert.c \
        lib/caslib.c \
        lib/printlib.c \
-       lib/cmdlib.c
+       lib/cmdlib.c \
+       lib/wavlib.c
 
 OBJS = $(SRCS:.c=.o)
 

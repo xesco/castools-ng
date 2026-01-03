@@ -10,6 +10,7 @@ static int cmd_list(int argc, char *argv[]);
 static int cmd_info(int argc, char *argv[]);
 static int cmd_export(int argc, char *argv[]);
 static int cmd_doctor(int argc, char *argv[]);
+static int cmd_convert(int argc, char *argv[]);
 
 // Command structure
 typedef struct {
@@ -24,6 +25,7 @@ static const Command commands[] = {
     {"info", cmd_info, "Show container statistics"},
     {"export", cmd_export, "Export file(s) from container"},
     {"doctor", cmd_doctor, "Check CAS file integrity"},
+    {"convert", cmd_convert, "Convert CAS to WAV audio"},
     {NULL, NULL, NULL}
 };
 
@@ -72,6 +74,27 @@ static void print_doctor_help(void) {
     printf("  -m, --disk-markers  Check for disk format markers (0xFE/0xFF) in BINARY files\n");
     printf("  -v, --verbose       Verbose output\n");
     printf("  -h, --help          Show this help message\n");
+}
+
+static void print_convert_help(void) {
+    printf("Usage: cast convert <input.cas> <output.wav> [options]\n\n");
+    printf("Convert CAS file to MSX cassette tape WAV audio.\n\n");
+    printf("Options:\n");
+    printf("  -b, --baud <rate>       Baud rate: 1200 (standard) or 2400 (turbo) [default: 1200]\n");
+    printf("  -s, --sample <rate>     Sample rate in Hz [default: 43200]\n");
+    printf("                          Common: 43200, 44100, 48000, 88200, 96000\n");
+    printf("                          Must be divisible by 1200\n");
+    printf("  -w, --wave <type>       Waveform type [default: sine]\n");
+    printf("                          Types: sine, square, triangle, trapezoid\n");
+    printf("  -c, --channels <num>    Channels: 1 (mono) or 2 (stereo) [default: 1]\n");
+    printf("  -d, --depth <bits>      Bit depth: 8 or 16 [default: 8]\n");
+    printf("  -a, --amplitude <val>   Signal amplitude: 1-127 for 8-bit, 1-255 for 16-bit [default: 120]\n");
+    printf("  -v, --verbose           Verbose output\n");
+    printf("  -h, --help              Show this help message\n\n");
+    printf("Examples:\n");
+    printf("  cast convert game.cas game.wav\n");
+    printf("  cast convert game.cas game.wav --baud 2400 --wave square\n");
+    printf("  cast convert game.cas game.wav -s 44100 -a 100\n");
 }
 
 static int cmd_list(int argc, char *argv[]) {
@@ -263,6 +286,88 @@ static int cmd_doctor(int argc, char *argv[]) {
     input_file = argv[optind];
 
     return execute_doctor(input_file, check_disk_markers, verbose);
+}
+
+static int cmd_convert(int argc, char *argv[]) {
+    const char *input_file = NULL;
+    const char *output_file = NULL;
+    uint16_t baud_rate = 1200;
+    uint32_t sample_rate = 43200;
+    WaveformType waveform_type = WAVE_SINE;
+    uint16_t channels = 1;
+    uint16_t bits_per_sample = 8;
+    uint8_t amplitude = 120;
+    bool verbose = false;
+
+    struct option long_options[] = {
+        {"baud", required_argument, 0, 'b'},
+        {"sample", required_argument, 0, 's'},
+        {"wave", required_argument, 0, 'w'},
+        {"channels", required_argument, 0, 'c'},
+        {"depth", required_argument, 0, 'd'},
+        {"amplitude", required_argument, 0, 'a'},
+        {"verbose", no_argument, 0, 'v'},
+        {"help", no_argument, 0, 'h'},
+        {0, 0, 0, 0}
+    };
+
+    int opt;
+    while ((opt = getopt_long(argc, argv, "b:s:w:c:d:a:vh", long_options, NULL)) != -1) {
+        switch (opt) {
+            case 'b':
+                baud_rate = atoi(optarg);
+                break;
+            case 's':
+                sample_rate = atoi(optarg);
+                break;
+            case 'w':
+                if (strcasecmp(optarg, "sine") == 0) {
+                    waveform_type = WAVE_SINE;
+                } else if (strcasecmp(optarg, "square") == 0) {
+                    waveform_type = WAVE_SQUARE;
+                } else if (strcasecmp(optarg, "triangle") == 0) {
+                    waveform_type = WAVE_TRIANGLE;
+                } else if (strcasecmp(optarg, "trapezoid") == 0) {
+                    waveform_type = WAVE_TRAPEZOID;
+                } else {
+                    fprintf(stderr, "Error: Unknown waveform type '%s'\n", optarg);
+                    fprintf(stderr, "Valid types: sine, square, triangle, trapezoid\n");
+                    return 1;
+                }
+                break;
+            case 'c':
+                channels = atoi(optarg);
+                break;
+            case 'd':
+                bits_per_sample = atoi(optarg);
+                break;
+            case 'a':
+                amplitude = atoi(optarg);
+                break;
+            case 'v':
+                verbose = true;
+                break;
+            case 'h':
+                print_convert_help();
+                return 0;
+            default:
+                print_convert_help();
+                return 1;
+        }
+    }
+
+    // Get positional arguments
+    if (optind + 2 > argc) {
+        fprintf(stderr, "Error: Missing required arguments\n\n");
+        print_convert_help();
+        return 1;
+    }
+
+    input_file = argv[optind];
+    output_file = argv[optind + 1];
+
+    return execute_convert(input_file, output_file, baud_rate, sample_rate,
+                          waveform_type, channels, bits_per_sample, amplitude, verbose);
 }
 
 int main(int argc, char *argv[]) {
