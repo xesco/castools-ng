@@ -11,25 +11,9 @@ static const AudioProfile profiles[] = {
     {
         .name = "default",
         .short_desc = "Balanced default for most MSX machines",
-        .use_case = "Starting point for most MSX hardware",
+        .use_case = "Starting point for most MSX hardware, computer-to-MSX playback",
         .category = "Standard",
-        .waveform = WAVE_SINE,
-        .baud_rate = 1200,
-        .sample_rate = 43200,
-        .amplitude = 120,
-        .trapezoid_rise_percent = 10,
-        .long_silence = 2.0f,
-        .short_silence = 1.0f,
-        .enable_lowpass = false,
-        .lowpass_cutoff_hz = 6000,
-        .rationale = "Standard MSX cassette format, works on most hardware"
-    },
-    {
-        .name = "computer-direct",
-        .short_desc = "Playing WAV from computer to MSX",
-        .use_case = "Playing WAV from computer audio output directly to MSX (via cable)",
-        .category = "Standard",
-        .waveform = WAVE_SINE,
+        .waveform = WAVE_TRAPEZOID,
         .baud_rate = 1200,
         .sample_rate = 43200,
         .amplitude = 120,
@@ -38,7 +22,7 @@ static const AudioProfile profiles[] = {
         .short_silence = 1.0f,
         .enable_lowpass = true,
         .lowpass_cutoff_hz = 6000,
-        .rationale = "Low-pass filter removes computer audio artifacts for cleaner playback"
+        .rationale = "Trapezoid wave (10% rise) with low-pass filter for reliable real hardware playback"
     },
     
     // Fast Loading Profiles
@@ -73,6 +57,72 @@ static const AudioProfile profiles[] = {
         .enable_lowpass = true,
         .lowpass_cutoff_hz = 7000,
         .rationale = "2400 baud gentler waveform with extra timing margins, compact 48kHz files"
+    },
+    
+    // Space Saving Profiles
+    {
+        .name = "compact",
+        .short_desc = "Balanced file size reduction",
+        .use_case = "Reduce file size while maintaining good compatibility",
+        .category = "Space Saving",
+        .waveform = WAVE_TRAPEZOID,
+        .baud_rate = 2400,
+        .sample_rate = 36000,
+        .amplitude = 120,
+        .trapezoid_rise_percent = 10,
+        .long_silence = 1.5f,
+        .short_silence = 0.8f,
+        .enable_lowpass = true,
+        .lowpass_cutoff_hz = 7000,
+        .rationale = "2400 baud, 36kHz (15 samples/cycle), trapezoid wave for real hardware, shorter leaders"
+    },
+    {
+        .name = "compact-plus",
+        .short_desc = "Aggressive file size reduction",
+        .use_case = "Minimize file size with acceptable quality",
+        .category = "Space Saving",
+        .waveform = WAVE_TRAPEZOID,
+        .baud_rate = 2400,
+        .sample_rate = 28800,
+        .amplitude = 118,
+        .trapezoid_rise_percent = 12,
+        .long_silence = 1.2f,
+        .short_silence = 0.6f,
+        .enable_lowpass = true,
+        .lowpass_cutoff_hz = 7000,
+        .rationale = "2400 baud, 28.8kHz (12 samples/cycle), gentler trapezoid, minimal leaders"
+    },
+    {
+        .name = "compact-max",
+        .short_desc = "Maximum file size reduction",
+        .use_case = "Smallest possible files, good hardware required",
+        .category = "Space Saving",
+        .waveform = WAVE_SINE,
+        .baud_rate = 2400,
+        .sample_rate = 24000,
+        .amplitude = 120,
+        .trapezoid_rise_percent = 10,
+        .long_silence = 1.0f,
+        .short_silence = 0.5f,
+        .enable_lowpass = true,
+        .lowpass_cutoff_hz = 7000,
+        .rationale = "2400 baud, 24kHz (10 samples/cycle at Nyquist), sine wave for cleanest signal"
+    },
+    {
+        .name = "compact-extreme",
+        .short_desc = "Extreme file size reduction",
+        .use_case = "Absolute smallest files, excellent hardware required",
+        .category = "Space Saving",
+        .waveform = WAVE_TRIANGLE,
+        .baud_rate = 2400,
+        .sample_rate = 14400,
+        .amplitude = 120,
+        .trapezoid_rise_percent = 10,
+        .long_silence = 0.8f,
+        .short_silence = 0.3f,
+        .enable_lowpass = true,
+        .lowpass_cutoff_hz = 6500,
+        .rationale = "2400 baud, 14.4kHz (6 samples/cycle, 3 at 4800Hz), triangle wave, absolute minimum viable"
     },
     
     // Problem-Solving Profiles
@@ -141,6 +191,88 @@ static const AudioProfile profiles[] = {
         .enable_lowpass = false,
         .lowpass_cutoff_hz = 6000,
         .rationale = "Pure sine at high sample rate for clean oscilloscope/audio analysis"
+    },
+    
+    // Experimental Profiles
+    {
+        .name = "triangle",
+        .short_desc = "Triangle wave for noisy environments",
+        .use_case = "Electrically noisy environments, RF interference",
+        .category = "Experimental",
+        .waveform = WAVE_TRIANGLE,
+        .baud_rate = 1200,
+        .sample_rate = 43200,
+        .amplitude = 125,
+        .trapezoid_rise_percent = 10,
+        .long_silence = 3.0f,
+        .short_silence = 2.0f,
+        .enable_lowpass = true,
+        .lowpass_cutoff_hz = 5500,
+        .rationale = "Triangle wave has unique harmonic content, high amplitude + filtering for noise immunity"
+    },
+    {
+        .name = "long-cable",
+        .short_desc = "Long audio cable compensation",
+        .use_case = "Cable runs >3 meters, signal degradation",
+        .category = "Experimental",
+        .waveform = WAVE_TRIANGLE,
+        .baud_rate = 1200,
+        .sample_rate = 43200,
+        .amplitude = 127,
+        .trapezoid_rise_percent = 10,
+        .long_silence = 3.0f,
+        .short_silence = 2.0f,
+        .enable_lowpass = true,
+        .lowpass_cutoff_hz = 5000,
+        .rationale = "Triangle wave survives cable degradation, max amplitude, aggressive low-pass for HF loss"
+    },
+    {
+        .name = "ultra-gentle",
+        .short_desc = "Extremely damaged/worn hardware",
+        .use_case = "Failing capacitors, severe drift, very poor AGC",
+        .category = "Experimental",
+        .waveform = WAVE_TRAPEZOID,
+        .baud_rate = 1200,
+        .sample_rate = 43200,
+        .amplitude = 100,
+        .trapezoid_rise_percent = 25,
+        .long_silence = 8.0f,
+        .short_silence = 5.0f,
+        .enable_lowpass = true,
+        .lowpass_cutoff_hz = 5000,
+        .rationale = "Ultra-gentle 25% rise, low amplitude, extreme leader times for severely damaged circuits"
+    },
+    {
+        .name = "turbo-gentle",
+        .short_desc = "Fast loading on unreliable hardware",
+        .use_case = "Need 2400 baud speed but hardware is questionable",
+        .category = "Experimental",
+        .waveform = WAVE_TRIANGLE,
+        .baud_rate = 2400,
+        .sample_rate = 48000,
+        .amplitude = 118,
+        .trapezoid_rise_percent = 10,
+        .long_silence = 4.0f,
+        .short_silence = 2.5f,
+        .enable_lowpass = true,
+        .lowpass_cutoff_hz = 6500,
+        .rationale = "Triangle wave at 2400 baud with extreme safety margins, filtered for reliability"
+    },
+    {
+        .name = "turbo-3600",
+        .short_desc = "3600 baud (3x speed) - experimental",
+        .use_case = "3x speed experiment, may work on some real MSX hardware",
+        .category = "Experimental",
+        .waveform = WAVE_TRAPEZOID,
+        .baud_rate = 3600,
+        .sample_rate = 36000,
+        .amplitude = 125,
+        .trapezoid_rise_percent = 10,
+        .long_silence = 1.0f,
+        .short_silence = 0.5f,
+        .enable_lowpass = true,
+        .lowpass_cutoff_hz = 8000,
+        .rationale = "3600 baud, trapezoid for hardware, filtered, pushes MSX bandwidth limits"
     }
 };
 

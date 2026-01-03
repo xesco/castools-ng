@@ -10,7 +10,7 @@
 static int cmd_list(int argc, char *argv[]);
 static int cmd_info(int argc, char *argv[]);
 static int cmd_export(int argc, char *argv[]);
-static int cmd_doctor(int argc, char *argv[]);
+
 static int cmd_convert(int argc, char *argv[]);
 static int cmd_profile(int argc, char *argv[]);
 
@@ -26,7 +26,6 @@ static const Command commands[] = {
     {"list", cmd_list, "List files in a CAS container"},
     {"info", cmd_info, "Show container statistics"},
     {"export", cmd_export, "Export file(s) from container"},
-    {"doctor", cmd_doctor, "Check CAS file integrity"},
     {"convert", cmd_convert, "Convert CAS to WAV audio"},
     {"profile", cmd_profile, "List or show audio profiles"},
     {NULL, NULL, NULL}
@@ -70,15 +69,6 @@ static void print_export_help(void) {
     printf("  -h, --help          Show this help message\n");
 }
 
-static void print_doctor_help(void) {
-    printf("Usage: cast doctor <file.cas> [options]\n\n");
-    printf("Check CAS file integrity and detect issues.\n\n");
-    printf("Options:\n");
-    printf("  -m, --disk-markers  Check for disk format markers (0xFE/0xFF) in BINARY files\n");
-    printf("  -v, --verbose       Verbose output\n");
-    printf("  -h, --help          Show this help message\n");
-}
-
 static void print_convert_help(void) {
     printf("Usage: cast convert <input.cas> <output.wav> [options]\n\n");
     printf("Convert CAS file to MSX cassette tape WAV audio.\n\n");
@@ -96,9 +86,9 @@ static void print_convert_help(void) {
     printf("                          standard: 2.0s/1.0s (default, fast loading)\n");
     printf("                          conservative: 3.0s/2.0s (more AGC/motor time)\n");
     printf("                          extended: 5.0s/3.0s (maximum compatibility)\n");
-    printf("  -p, --preset <name>     Use predefined audio profile\n");
-    printf("                          Use 'cast profile' to list available presets\n");
-    printf("                          Individual options override preset values\n");
+    printf("  -p, --profile <name>    Use predefined audio profile\n");
+    printf("                          Use 'cast profile' to list available profiles\n");
+    printf("                          Individual options override profile values\n");
     printf("  -c, --channels <num>    Channels: 1 (mono) or 2 (stereo) [default: 1]\n");
     printf("  -d, --depth <bits>      Bit depth: 8 or 16 [default: 8]\n");
     printf("  -a, --amplitude <val>   Signal amplitude: 1-127 for 8-bit, 1-255 for 16-bit [default: 120]\n");
@@ -114,8 +104,8 @@ static void print_convert_help(void) {
     printf("  cast convert game.cas game.wav --lowpass\n");
     printf("  cast convert game.cas game.wav --wave trapezoid --rise 20\n");
     printf("  cast convert game.cas game.wav --leader conservative\n");
-    printf("  cast convert game.cas game.wav --preset computer-direct\n");
-    printf("  cast convert game.cas game.wav --preset msx1 --baud 2400\n");
+    printf("  cast convert game.cas game.wav --profile computer-direct\n");
+    printf("  cast convert game.cas game.wav --profile default --baud 2400\n");
     printf("  cast convert game.cas game.wav --lowpass 5500 --wave trapezoid\n");
 }
 
@@ -270,53 +260,13 @@ static int cmd_export(int argc, char *argv[]) {
     return execute_export(input_file, index, output_dir, force, verbose, disk_format);
 }
 
-static int cmd_doctor(int argc, char *argv[]) {
-    const char *input_file = NULL;
-    bool check_disk_markers = false;
-    bool verbose = false;
-
-    struct option long_options[] = {
-        {"disk-markers", no_argument, 0, 'm'},
-        {"verbose", no_argument, 0, 'v'},
-        {"help", no_argument, 0, 'h'},
-        {0, 0, 0, 0}
-    };
-
-    int opt;
-    optind = 1; // Reset getopt
-    while ((opt = getopt_long(argc, argv, "mvh", long_options, NULL)) != -1) {
-        switch (opt) {
-            case 'm':
-                check_disk_markers = true;
-                break;
-            case 'v':
-                verbose = true;
-                break;
-            case 'h':
-                print_doctor_help();
-                return 0;
-            default:
-                return 1;
-        }
-    }
-
-    if (optind >= argc) {
-        print_doctor_help();
-        return 0;
-    }
-
-    input_file = argv[optind];
-
-    return execute_doctor(input_file, check_disk_markers, verbose);
-}
-
 static int cmd_convert(int argc, char *argv[]) {
     const char *input_file = NULL;
     const char *output_file = NULL;
-    const char *preset_name = NULL;
+    const char *profile_name = NULL;
     uint16_t baud_rate = 1200;
     uint32_t sample_rate = 43200;
-    WaveformType waveform_type = WAVE_SINE;
+    WaveformType waveform_type = WAVE_TRAPEZOID;
     uint16_t channels = 1;
     uint16_t bits_per_sample = 8;
     uint8_t amplitude = 120;
@@ -327,7 +277,7 @@ static int cmd_convert(int argc, char *argv[]) {
     uint16_t lowpass_cutoff_hz = 6000;
     bool verbose = false;
     
-    // Track which options were explicitly set (for preset override)
+    // Track which options were explicitly set (for profile override)
     bool explicit_baud = false;
     bool explicit_sample = false;
     bool explicit_wave = false;
@@ -345,7 +295,7 @@ static int cmd_convert(int argc, char *argv[]) {
         {"amplitude", required_argument, 0, 'a'},
         {"rise", required_argument, 0, 'r'},
         {"leader", required_argument, 0, 't'},
-        {"preset", required_argument, 0, 'p'},
+        {"profile", required_argument, 0, 'p'},
         {"lowpass", optional_argument, 0, 'l'},
         {"verbose", no_argument, 0, 'v'},
         {"help", no_argument, 0, 'h'},
@@ -415,7 +365,7 @@ static int cmd_convert(int argc, char *argv[]) {
                 explicit_leader = true;
                 break;
             case 'p':
-                preset_name = optarg;
+                profile_name = optarg;
                 break;
             case 'l':
                 enable_lowpass = true;
@@ -450,16 +400,16 @@ static int cmd_convert(int argc, char *argv[]) {
     input_file = argv[optind];
     output_file = argv[optind + 1];
 
-    // Apply preset if specified
-    if (preset_name) {
-        const AudioProfile *profile = findProfile(preset_name);
+    // Apply profile if specified
+    if (profile_name) {
+        const AudioProfile *profile = findProfile(profile_name);
         if (!profile) {
-            fprintf(stderr, "Error: Unknown preset '%s'\n", preset_name);
-            fprintf(stderr, "Use 'cast profile' to list available presets.\n");
+            fprintf(stderr, "Error: Unknown profile '%s'\n", profile_name);
+            fprintf(stderr, "Use 'cast profile' to list available profiles.\n");
             return 1;
         }
         
-        // Apply preset values only if not explicitly overridden
+        // Apply profile values only if not explicitly overridden
         if (!explicit_wave) waveform_type = profile->waveform;
         if (!explicit_baud) baud_rate = profile->baud_rate;
         if (!explicit_sample) sample_rate = profile->sample_rate;

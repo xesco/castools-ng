@@ -11,6 +11,7 @@
  */
 
 #include "../lib/wavlib.h"
+#include "test_utils.h"
 #include <stdio.h>
 
 int main(void) {

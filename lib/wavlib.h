@@ -106,15 +106,6 @@ WavFormat createDefaultWavFormat(void);
 // Create default waveform config (sine wave with default amplitude)
 WaveformConfig createDefaultWaveform(void);
 
-// Create custom waveform config with specific type
-WaveformConfig createWaveform(WaveformType type, uint8_t amplitude);
-
-// Set trapezoid rise time (only applies to WAVE_TRAPEZOID)
-// rise_percent: Rise/fall time as percentage of cycle (5, 10, 15, 20)
-//               Valid range: 1-50 (values outside are clamped)
-// Returns false if waveform type is not trapezoid
-bool setTrapezoidRiseTime(WaveformConfig *config, uint8_t rise_percent);
-
 // =============================================================================
 // Validation
 // =============================================================================
@@ -208,7 +199,8 @@ bool writeSync(WavWriter *writer, size_t bit_count, const WaveformConfig *config
 // Convert a complete CAS file to WAV audio format
 // Reads the CAS file, parses its structure, and generates MSX cassette tape audio
 // Returns true on success, false on error
+// If duration_seconds is not NULL, stores the WAV duration in seconds
 bool convertCasToWav(const char *cas_filename, const char *wav_filename, 
-                     const WaveformConfig *config, bool verbose);
+                     const WaveformConfig *config, bool verbose, double *duration_seconds);
 
 #endif // WAVLIB_H

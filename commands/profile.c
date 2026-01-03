@@ -84,7 +84,7 @@ int execute_profile(const char *profile_name, bool verbose) {
     
     if (verbose) {
         printf("Command Example:\n");
-        printf("  cast convert input.cas output.wav --preset %s\n", profile->name);
+        printf("  cast convert input.cas output.wav --profile %s\n", profile->name);
     }
     
     return 0;

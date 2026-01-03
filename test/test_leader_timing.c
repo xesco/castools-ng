@@ -15,6 +15,7 @@
 
 #include "../lib/wavlib.h"
 #include "../lib/caslib.h"
+#include "test_utils.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -27,6 +28,7 @@ static bool create_timing_test(const char *filename, float long_silence,
     
     WaveformConfig config = createDefaultWaveform();
     config.baud_rate = 1200;
+    config.sample_rate = fmt.sample_rate;  // Match WAV format sample rate
     config.long_silence = long_silence;
     config.short_silence = short_silence;
     

@@ -14,6 +14,7 @@
  */
 
 #include "../lib/wavlib.h"
+#include "test_utils.h"
 #include <stdio.h>
 
 static bool create_trapezoid_test(const char *filename, uint8_t rise_percent) {

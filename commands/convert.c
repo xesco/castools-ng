@@ -23,8 +23,9 @@ static bool validateSampleRate(uint32_t rate) {
 
 // Validate baud rate
 static bool validateBaudRate(uint16_t baud) {
-    if (baud != 1200 && baud != 2400) {
-        fprintf(stderr, "Error: Baud rate must be 1200 (standard) or 2400 (turbo)\n");
+    // Allow standard (1200), turbo (2400), and experimental higher rates
+    if (baud < 1200 || baud > 9600) {
+        fprintf(stderr, "Error: Baud rate must be between 1200-9600\n");
         return false;
     }
     return true;
@@ -182,22 +183,22 @@ int execute_convert(const char *input_file, const char *output_file,
     cas_Container saved_container = container;
     
     // Perform conversion
-    if (!convertCasToWav(input_file, output_file, &waveform, verbose)) {
+    double duration = 0.0;
+    if (!convertCasToWav(input_file, output_file, &waveform, verbose, &duration)) {
         fprintf(stderr, "Error: Conversion failed\n");
         free(container.files);
         free(file_data);
         return 1;
     }
     
-    // Success message and MSX command
+    // Success message with duration
+    int minutes = (int)(duration / 60.0);
+    int seconds = (int)(duration) % 60;
     printf("✓ Conversion complete!\n");
+    printf("Audio length: %d:%02d (%.1f seconds)\n", minutes, seconds, duration);
     
     // Generate MSX command for loading (find first non-custom file)
-    if (verbose) {
-        printf("\n=== MSX Command ===\n");
-    } else {
-        printf("MSX Command: ");
-    }
+    printf("MSX Command: ");
     
     bool found_command = false;
     for (size_t i = 0; i < saved_container.file_count; i++) {
