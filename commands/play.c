@@ -376,6 +376,8 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
     // Help text or hint
     draw_left_border(y);
     print_left(y, 2, "Press 'h' for help", COLOR_DIM);
+    draw_middle_border(y);
+    print_right(y, SPLIT_COL + 2, "github.com/xesco · © 2026", COLOR_DIM);
     draw_right_border(y);
     y++;
 
