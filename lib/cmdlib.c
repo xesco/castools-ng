@@ -126,19 +126,10 @@ bool writeFileData(const char *filename, const cas_File *file, bool verbose, boo
         return false;
     }
     
-    // MSX Disk file format identifiers (disk format only):
-    //   - Tokenized BASIC programs: 0xFF as first byte (file type identifier)
-    //   - Binary files (BSAVE): 0xFE as first byte of 7-byte header
-    //     Header: [0xFE][start_addr][end_addr][exec_addr] (all addresses little-endian)
-    //
-    // CAS (cassette) format uses different headers (0xD3 for BASIC, 0xD0 for binary),
-    // so when extracting to disk files with --disk-format flag, we add the appropriate
-    // disk identifier byte.
-
-    // For disk format: write appropriate prefix byte
+    // For disk format: add MSX disk file identifier bytes
+    // BASIC: 0xFF prefix, BINARY: 0xFE prefix
     if (disk_format) {
         if (isBasicFile(file->file_header.file_type)) {
-            // Tokenized BASIC files start with 0xFF
             uint8_t prefix = 0xFF;
             if (fwrite(&prefix, 1, 1, fp) != 1) {
                 fprintf(stderr, "Error: Failed to write BASIC prefix to '%s'\n", filename);
@@ -149,8 +140,7 @@ bool writeFileData(const char *filename, const cas_File *file, bool verbose, boo
                 printf("Added 0xFF prefix (BASIC file identifier)\n");
             }
         } else if (isBinaryFile(file->file_header.file_type)) {
-            // Binary files start with 0xFE (first byte of 7-byte header)
-            uint8_t prefix = BINARY_FILE_ID_BYTE;  // 0xFE
+            uint8_t prefix = BINARY_FILE_ID_BYTE;
             if (fwrite(&prefix, 1, 1, fp) != 1) {
                 fprintf(stderr, "Error: Failed to write binary prefix to '%s'\n", filename);
                 fclose(fp);
@@ -171,20 +161,30 @@ bool writeFileData(const char *filename, const cas_File *file, bool verbose, boo
         }
     }
     
-    // Write all data blocks (common for all file types)
+    // Write all data blocks
     for (size_t i = 0; i < file->data_block_count; i++) {
         const cas_DataBlock *block = &file->data_blocks[i];
         if (block->data && block->data_size > 0) {
-            size_t written = fwrite(block->data, 1, block->data_size, fp);
-            if (written != block->data_size) {
+            size_t write_size = block->data_size;
+            
+            // For ASCII files, stop at EOF marker (0x1A) - exclude the marker itself
+            if (isAsciiFile(file->file_header.file_type)) {
+                for (size_t j = 0; j < block->data_size; j++) {
+                    if (block->data[j] == 0x1A) {
+                        write_size = j;  // Stop before 0x1A
+                        break;
+                    }
+                }
+            }
+            
+            size_t written = fwrite(block->data, 1, write_size, fp);
+            if (written != write_size) {
                 fprintf(stderr, "Error: Failed to write data to '%s'\n", filename);
                 fclose(fp);
                 return false;
             }
         }
     }
-    
-    // No suffix marker needed - MSX disk format files end immediately after data
     
     fclose(fp);
     
