@@ -1021,8 +1021,7 @@ bool convertCasToWav(const char *cas_filename, const char *wav_filename,
         }
     }
     
-    // Add trailing silence and end marker after last block
-    writeSilence(writer, 1.0);  // 1 second trailing silence
+    // Add end marker after last block (no actual audio needed)
     addMarkerIfEnabled(writer, MARKER_DETAIL, "End of tape");
     
     // Calculate duration before closing
