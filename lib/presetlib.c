@@ -13,7 +13,7 @@ static const AudioProfile profiles[] = {
         .short_desc = "Balanced default for most MSX machines",
         .use_case = "Starting point for most MSX hardware, computer-to-MSX playback",
         .category = "Standard",
-        .waveform = WAVE_TRAPEZOID,
+        .waveform = WAVE_SQUARE,
         .baud_rate = 1200,
         .sample_rate = 43200,
         .amplitude = 120,
@@ -22,7 +22,7 @@ static const AudioProfile profiles[] = {
         .short_silence = 1.0f,
         .enable_lowpass = true,
         .lowpass_cutoff_hz = 6000,
-        .rationale = "Trapezoid wave (10% rise) with low-pass filter for reliable real hardware playback"
+        .rationale = "Square wave with low-pass filter for reliable real hardware playback, sharp zero-crossings for precise timing"
     },
     
     // Fast Loading Profiles
@@ -131,7 +131,7 @@ static const AudioProfile profiles[] = {
         .short_desc = "Maximum compatibility for problematic hardware",
         .use_case = "Difficult loading, aging hardware, or when standard settings fail",
         .category = "Problem-Solving",
-        .waveform = WAVE_TRAPEZOID,
+        .waveform = WAVE_SQUARE,
         .baud_rate = 1200,
         .sample_rate = 43200,
         .amplitude = 105,
@@ -140,7 +140,7 @@ static const AudioProfile profiles[] = {
         .short_silence = 3.0f,
         .enable_lowpass = true,
         .lowpass_cutoff_hz = 5500,
-        .rationale = "Maximum safety: gentle slopes, long leader, filtered, lower amplitude"
+        .rationale = "Maximum safety: square wave for precise timing, long leader, filtered, lower amplitude for headroom"
     },
     {
         .name = "tape-recording",

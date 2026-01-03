@@ -25,4 +25,10 @@ char* buildFilePath(const char *dir, const char *filename);
 // disk_format: if true, add MSX-DOS prefix (0xFE/0xFF) for BINARY/BASIC files
 bool writeFileData(const char *filename, const cas_File *file, bool verbose, bool disk_format);
 
+// Format bytes into human-readable string (e.g., "1.5 KB", "2.3 MB")
+void formatBytes(size_t bytes, char *buffer, size_t buffer_size);
+
+// Format seconds into MM:SS format
+void formatDuration(double seconds, char *buffer, size_t buffer_size);
+
 #endif // CMDLIB_H

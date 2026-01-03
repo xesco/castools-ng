@@ -45,6 +45,35 @@ typedef struct {
     uint32_t data_size;     // Size of audio data
 } WavDataChunk;
 
+// Cue point structures for markers
+typedef struct {
+    char cue[4];            // "cue "
+    uint32_t chunk_size;    // Size of chunk (4 + num_cues * 24)
+    uint32_t num_cues;      // Number of cue points
+} CueChunkHeader;
+
+typedef struct {
+    uint32_t cue_id;        // Unique ID for this cue point
+    uint32_t position;      // Position (unused, set to 0)
+    char chunk_id[4];       // "data"
+    uint32_t chunk_start;   // Byte offset of data chunk (unused, set to 0)
+    uint32_t block_start;   // Byte offset to sample (unused, set to 0)
+    uint32_t sample_offset; // Sample frame offset (the actual position)
+} CuePoint;
+
+typedef struct {
+    char list[4];           // "LIST"
+    uint32_t chunk_size;    // Size of entire LIST chunk
+    char type[4];           // "adtl" (associated data list)
+} ListChunkHeader;
+
+typedef struct {
+    char labl[4];           // "labl"
+    uint32_t chunk_size;    // Size of this label (4 + text length + padding)
+    uint32_t cue_id;        // References CuePoint ID
+    // Followed by null-terminated text string (padded to even length)
+} LabelChunkHeader;
+
 // =============================================================================
 // Helper Functions - Little Endian Writing
 // =============================================================================
@@ -72,7 +101,7 @@ WavFormat createDefaultWavFormat(void) {
 
 WaveformConfig createDefaultWaveform(void) {
     WaveformConfig config = {
-        .type = WAVE_TRAPEZOID,
+        .type = WAVE_SQUARE,
         .amplitude = 120,
         .baud_rate = 1200,  // Standard MSX baud rate
         .sample_rate = 43200,  // Default MSX sample rate
@@ -82,7 +111,8 @@ WaveformConfig createDefaultWaveform(void) {
         .long_silence = SILENCE_LONG_HEADER,   // 2s before file header
         .short_silence = SILENCE_SHORT_HEADER, // 1s before data blocks
         .enable_lowpass = false,     // Disabled by default for backward compatibility
-        .lowpass_cutoff_hz = 6000    // Sensible default: above 4800 Hz max signal
+        .lowpass_cutoff_hz = 6000,   // Sensible default: above 4800 Hz max signal
+        .enable_markers = false      // Disabled by default
     };
     return config;
 }
@@ -124,6 +154,90 @@ bool validateWavFormat(const WavFormat *format) {
 }
 
 // =============================================================================
+// Marker Management
+// =============================================================================
+
+MarkerList* createMarkerList(void) {
+    MarkerList *list = malloc(sizeof(MarkerList));
+    if (!list) {
+        fprintf(stderr, "Error: Failed to allocate MarkerList\n");
+        return NULL;
+    }
+    
+    // Start with capacity for 100 markers (reasonable for most files)
+    list->capacity = 100;
+    list->count = 0;
+    list->markers = malloc(list->capacity * sizeof(Marker));
+    
+    if (!list->markers) {
+        fprintf(stderr, "Error: Failed to allocate marker array\n");
+        free(list);
+        return NULL;
+    }
+    
+    return list;
+}
+
+bool addMarker(MarkerList *list, size_t sample_pos,
+               MarkerCategory category, const char *description) {
+    if (!list || !description) {
+        return false;
+    }
+    
+    // Expand capacity if needed
+    if (list->count >= list->capacity) {
+        size_t new_capacity = list->capacity * 2;
+        Marker *new_markers = realloc(list->markers, new_capacity * sizeof(Marker));
+        if (!new_markers) {
+            fprintf(stderr, "Error: Failed to expand marker list\n");
+            return false;
+        }
+        list->markers = new_markers;
+        list->capacity = new_capacity;
+    }
+    
+    // Add the marker
+    Marker *m = &list->markers[list->count];
+    m->sample_position = sample_pos;
+    m->category = category;
+    
+    // Copy description, ensuring null termination
+    strncpy(m->description, description, sizeof(m->description) - 1);
+    m->description[sizeof(m->description) - 1] = '\0';
+    
+    list->count++;
+    return true;
+}
+
+void freeMarkerList(MarkerList *list) {
+    if (list) {
+        free(list->markers);
+        free(list);
+    }
+}
+
+// Helper: Add marker if markers are enabled
+static inline void addMarkerIfEnabled(WavWriter *writer, MarkerCategory category, 
+                                      const char *description) {
+    if (writer && writer->markers) {
+        addMarker(writer->markers, writer->sample_count, category, description);
+    }
+}
+
+bool enableMarkers(WavWriter *writer) {
+    if (!writer) {
+        return false;
+    }
+    
+    if (writer->markers) {
+        return true;  // Already enabled
+    }
+    
+    writer->markers = createMarkerList();
+    return writer->markers != NULL;
+}
+
+// =============================================================================
 // WAV File Management
 // =============================================================================
 
@@ -157,6 +271,7 @@ WavWriter* createWavFile(const char *filename, const WavFormat *format) {
     writer->format = *format;
     writer->sample_count = 0;
     writer->lowpass_state = 128.0;  // Initialize to 8-bit center value
+    writer->markers = NULL;          // No markers by default (enabled later if needed)
     
     // Write WAV headers (with placeholder sizes - will update on close)
     WavRiffHeader riff = {
@@ -197,15 +312,154 @@ WavWriter* createWavFile(const char *filename, const WavFormat *format) {
     return writer;
 }
 
+// =============================================================================
+// Cue Chunk Writing
+// =============================================================================
+
+// Get category name for marker label
+static const char* getCategoryName(MarkerCategory category) {
+    switch (category) {
+        case MARKER_STRUCTURE: return "STRUCTURE";
+        case MARKER_DETAIL: return "DETAIL";
+        case MARKER_VERBOSE: return "VERBOSE";
+        default: return "UNKNOWN";
+    }
+}
+
+// Write cue chunk with marker positions
+static bool writeCueChunk(FILE *file, const MarkerList *markers) {
+    if (!file || !markers || markers->count == 0) {
+        return true;  // No markers, nothing to write
+    }
+    
+    // Write cue chunk header
+    CueChunkHeader cue_header;
+    memcpy(cue_header.cue, "cue ", 4);
+    cue_header.chunk_size = 4 + (markers->count * 24);  // 4 for num_cues + 24 bytes per cue point
+    cue_header.num_cues = markers->count;
+    
+    if (fwrite(&cue_header, 12, 1, file) != 1) {
+        return false;
+    }
+    
+    // Write each cue point
+    for (size_t i = 0; i < markers->count; i++) {
+        CuePoint cue;
+        cue.cue_id = i + 1;  // IDs start at 1
+        cue.position = 0;    // Unused
+        memcpy(cue.chunk_id, "data", 4);
+        cue.chunk_start = 0; // Unused
+        cue.block_start = 0; // Unused
+        cue.sample_offset = markers->markers[i].sample_position;
+        
+        if (fwrite(&cue, 24, 1, file) != 1) {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+// Write associated data list chunk with marker labels
+static bool writeAdtlChunk(FILE *file, const MarkerList *markers) {
+    if (!file || !markers || markers->count == 0) {
+        return true;  // No markers, nothing to write
+    }
+    
+    // Calculate total size of all labels
+    uint32_t labels_size = 0;
+    for (size_t i = 0; i < markers->count; i++) {
+        // Format: "[CATEGORY] description"
+        const char *cat_name = getCategoryName(markers->markers[i].category);
+        size_t text_len = strlen(cat_name) + 3 + strlen(markers->markers[i].description) + 1; // "[CAT] desc\0"
+        
+        // Each label chunk: "labl" (4) + size (4) + cue_id (4) + text (padded to even)
+        size_t label_chunk_size = 12 + ((text_len + 1) & ~1);  // Pad to even
+        labels_size += label_chunk_size;
+    }
+    
+    // Write LIST chunk header
+    ListChunkHeader list_header;
+    memcpy(list_header.list, "LIST", 4);
+    list_header.chunk_size = 4 + labels_size;  // 4 for "adtl" + all labels
+    memcpy(list_header.type, "adtl", 4);
+    
+    if (fwrite(&list_header, 12, 1, file) != 1) {
+        return false;
+    }
+    
+    // Write each label
+    for (size_t i = 0; i < markers->count; i++) {
+        // Format label text with category
+        char label_text[300];
+        const char *cat_name = getCategoryName(markers->markers[i].category);
+        snprintf(label_text, sizeof(label_text), "[%s] %s", 
+                cat_name, markers->markers[i].description);
+        
+        size_t text_len = strlen(label_text) + 1;  // Include null terminator
+        size_t padded_len = (text_len + 1) & ~1;   // Pad to even length
+        
+        // Write label chunk header
+        LabelChunkHeader label_header;
+        memcpy(label_header.labl, "labl", 4);
+        label_header.chunk_size = 4 + padded_len;  // cue_id + text
+        label_header.cue_id = i + 1;  // Match cue point ID
+        
+        if (fwrite(&label_header, 12, 1, file) != 1) {
+            return false;
+        }
+        
+        // Write text (with padding if needed)
+        if (fwrite(label_text, padded_len, 1, file) != 1) {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+// =============================================================================
+// WAV File Closing
+// =============================================================================
+
 bool closeWavFile(WavWriter *writer) {
     if (!writer || !writer->file) {
         return false;
     }
     
-    // Calculate sizes
+    // Calculate data chunk size
     size_t bytes_per_sample = writer->format.bits_per_sample / 8;
     uint32_t data_size = writer->sample_count * bytes_per_sample;
-    uint32_t file_size = 36 + data_size;  // 36 = header sizes before data
+    
+    // Write cue and adtl chunks if markers are present
+    uint32_t marker_chunks_size = 0;
+    if (writer->markers && writer->markers->count > 0) {
+        // Position at end of file to append chunks
+        fseek(writer->file, 0, SEEK_END);
+        
+        // Write cue chunk
+        long cue_pos = ftell(writer->file);
+        if (!writeCueChunk(writer->file, writer->markers)) {
+            fprintf(stderr, "Warning: Failed to write cue chunk\n");
+        } else {
+            // Calculate cue chunk size: 12 (header) + markers * 24
+            marker_chunks_size += 12 + (writer->markers->count * 24);
+            
+            // Write adtl chunk
+            if (!writeAdtlChunk(writer->file, writer->markers)) {
+                fprintf(stderr, "Warning: Failed to write adtl chunk\n");
+            } else {
+                long adtl_end = ftell(writer->file);
+                marker_chunks_size = adtl_end - cue_pos;
+            }
+        }
+    }
+    
+    // Calculate total file size
+    // 36 = RIFF header (12) + fmt chunk (8 + 16) = 20 + 16
+    // data_size includes the data chunk payload
+    // marker_chunks_size includes cue + adtl chunks
+    uint32_t file_size = 36 + data_size + marker_chunks_size;
     
     // Update RIFF chunk size (at offset 4)
     fseek(writer->file, 4, SEEK_SET);
@@ -217,6 +471,11 @@ bool closeWavFile(WavWriter *writer) {
     fseek(writer->file, writer->data_chunk_pos, SEEK_SET);
     write_u32_le(buf, data_size);
     fwrite(buf, 4, 1, writer->file);
+    
+    // Clean up markers if present
+    if (writer->markers) {
+        freeMarkerList(writer->markers);
+    }
     
     // Close and free
     fclose(writer->file);
@@ -253,10 +512,15 @@ bool writeSilence(WavWriter *writer, float seconds) {
         return false;
     }
     
+    // Add marker before silence starts
+    char desc[256];
+    snprintf(desc, sizeof(desc), "Silence (%.1fs)", seconds);
+    addMarkerIfEnabled(writer, MARKER_DETAIL, desc);
+    
     size_t num_samples = (size_t)(writer->format.sample_rate * seconds);
     uint8_t silence_value = (writer->format.bits_per_sample == 8) ? 128 : 0;
     
-    // Write silence in chunks to avoid huge allocations
+    // Write silence in chunks
     uint8_t buffer[4096];
     memset(buffer, silence_value, sizeof(buffer));
     
@@ -536,6 +800,12 @@ bool writeSync(WavWriter *writer, size_t count, const WaveformConfig *config) {
         return false;
     }
     
+    // Add marker for sync start
+    char desc[256];
+    const char *sync_type = (count >= 4000) ? "long" : "short";
+    snprintf(desc, sizeof(desc), "Sync %s (%zu bits)", sync_type, count);
+    addMarkerIfEnabled(writer, MARKER_DETAIL, desc);
+    
     // Write the specified number of consecutive 1-bits
     for (size_t i = 0; i < count; i++) {
         if (!writeBit1(writer, config)) {
@@ -659,9 +929,30 @@ bool convertCasToWav(const char *cas_filename, const char *wav_filename,
         return false;
     }
     
+    // Enable markers if requested
+    if (config->enable_markers) {
+        if (!enableMarkers(writer)) {
+            fprintf(stderr, "Error: Failed to enable markers\n");
+            closeWavFile(writer);
+            free(cas_data);
+            return false;
+        }
+    }
+    
     // Process each file in the container
     for (size_t file_idx = 0; file_idx < container.file_count; file_idx++) {
         const cas_File *file = &container.files[file_idx];
+        
+        // Prepare file marker for later
+        char file_marker[256];
+        if (!file->is_custom) {
+            snprintf(file_marker, sizeof(file_marker), "File %zu/%zu: %s \"%.6s\"",
+                    file_idx + 1, container.file_count, getFileTypeString(file),
+                    (char*)file->file_header.file_name);
+        } else {
+            snprintf(file_marker, sizeof(file_marker), "File %zu/%zu: Custom block",
+                    file_idx + 1, container.file_count);
+        }
         
         if (verbose) {
             printf("  File %zu/%zu: %s ", file_idx + 1, container.file_count,
@@ -678,14 +969,22 @@ bool convertCasToWav(const char *cas_filename, const char *wav_filename,
             if (verbose) {
                 printf("    Writing file header block...\n");
             }
+            
             writeSilence(writer, config->long_silence);
             writeSync(writer, 8000, config);  // Initial sync (LONG_HEADER = 16000 pulses / 2)
+            addMarkerIfEnabled(writer, MARKER_STRUCTURE, file_marker);  // File marker after sync
+            addMarkerIfEnabled(writer, MARKER_STRUCTURE, "File header");
             writeFileHeaderBlock(writer, file, config);
         }
         
         // Data blocks
         for (size_t block_idx = 0; block_idx < file->data_block_count; block_idx++) {
             const cas_DataBlock *block = &file->data_blocks[block_idx];
+            
+            // STRUCTURE marker: Data block start
+            char block_marker[256];
+            snprintf(block_marker, sizeof(block_marker), "Data block %zu/%zu (%zu bytes)",
+                    block_idx + 1, file->data_block_count, block->data_size);
             
             if (verbose) {
                 printf("    Writing data block %zu/%zu (%zu bytes)...\n",
@@ -696,6 +995,13 @@ bool convertCasToWav(const char *cas_filename, const char *wav_filename,
             // For first data block of non-custom files, use short header too
             writeSilence(writer, config->short_silence);
             writeSync(writer, 2000, config);  // Block sync (SHORT_HEADER = 4000 pulses / 2)
+            
+            // For custom blocks, add the file marker on the first data block
+            if (block_idx == 0 && file->is_custom) {
+                addMarkerIfEnabled(writer, MARKER_STRUCTURE, file_marker);
+            }
+            
+            addMarkerIfEnabled(writer, MARKER_STRUCTURE, block_marker);
             
             // For BINARY/BASIC files, write data block header first
             if (block_idx == 0 && (isBinaryFile(file->file_header.file_type) ||
@@ -715,6 +1021,10 @@ bool convertCasToWav(const char *cas_filename, const char *wav_filename,
         }
     }
     
+    // Add trailing silence and end marker after last block
+    writeSilence(writer, 1.0);  // 1 second trailing silence
+    addMarkerIfEnabled(writer, MARKER_DETAIL, "End of tape");
+    
     // Calculate duration before closing
     if (duration_seconds) {
         *duration_seconds = (double)writer->sample_count / (double)config->sample_rate;
@@ -729,4 +1039,62 @@ bool convertCasToWav(const char *cas_filename, const char *wav_filename,
     
     free(cas_data);
     return true;
+}
+
+// =============================================================================
+// Audio Estimation - Duration and Size Calculations
+// =============================================================================
+
+double calculateAudioDuration(const void *container_ptr, uint16_t baud_rate,
+                             float long_silence, float short_silence) {
+    const cas_Container *container = (const cas_Container *)container_ptr;
+    double total_bits = 0.0;
+    double total_silence = 0.0;
+    
+    for (size_t file_idx = 0; file_idx < container->file_count; file_idx++) {
+        const cas_File *file = &container->files[file_idx];
+        
+        // BLOCK 1: File header block (only for non-custom files)
+        if (!file->is_custom) {
+            // Long silence before file header
+            total_silence += long_silence;
+            
+            // Sync pulses: 8000 1-bits (each 1-bit = 2 pulses at 2×baud_rate)
+            total_bits += 8000;
+            
+            // File header: 16 bytes × 11 bits each (1 start + 8 data + 2 stop)
+            total_bits += 16 * 11;
+        }
+        
+        // Data blocks
+        for (size_t block_idx = 0; block_idx < file->data_block_count; block_idx++) {
+            const cas_DataBlock *block = &file->data_blocks[block_idx];
+            
+            // Short silence before data block
+            total_silence += short_silence;
+            
+            // Sync pulses: 2000 1-bits
+            total_bits += 2000;
+            
+            // Data block header for BINARY/BASIC (first block only)
+            if (block_idx == 0 && (isBinaryFile(file->file_header.file_type) ||
+                                   isBasicFile(file->file_header.file_type))) {
+                // Data block header: 6 bytes × 11 bits
+                total_bits += 6 * 11;
+            }
+            
+            // Data bytes: each byte = 11 bits
+            total_bits += block->data_size * 11;
+        }
+    }
+    
+    // Convert bits to seconds and add silence periods
+    double audio_duration = total_bits / (double)baud_rate;
+    return audio_duration + total_silence;
+}
+
+size_t calculateWavFileSize(double duration_seconds, uint32_t sample_rate) {
+    size_t num_samples = (size_t)(duration_seconds * sample_rate);
+    size_t data_size = num_samples;  // 8-bit mono
+    return 44 + data_size;  // 44-byte WAV header + data
 }

@@ -55,6 +55,31 @@ typedef enum {
 } WaveformType;
 
 // =============================================================================
+// WAV Cue Point Markers
+// =============================================================================
+
+// Marker categories for filtering during playback
+typedef enum {
+    MARKER_STRUCTURE,  // Essential structure: file/block boundaries
+    MARKER_DETAIL,     // Includes structure + operational details
+    MARKER_VERBOSE     // Everything including fine-grained progress
+} MarkerCategory;
+
+// Single cue point marker
+typedef struct {
+    size_t sample_position;     // Sample offset in WAV data
+    MarkerCategory category;    // Category for filtering
+    char description[256];      // Human-readable label
+} Marker;
+
+// Dynamic list of markers
+typedef struct {
+    Marker *markers;            // Array of markers
+    size_t count;               // Number of markers in use
+    size_t capacity;            // Allocated capacity
+} MarkerList;
+
+// =============================================================================
 // WAV File Format Configuration
 // =============================================================================
 
@@ -85,15 +110,19 @@ typedef struct {
     // Low-pass filter settings
     bool enable_lowpass;            // Enable low-pass filtering
     uint16_t lowpass_cutoff_hz;     // Cutoff frequency in Hz (e.g., 6000)
+    
+    // Marker generation settings
+    bool enable_markers;            // Generate cue point markers during conversion
 } WaveformConfig;
 
 // WAV file writer context (opaque to user)
 typedef struct {
     FILE *file;
     WavFormat format;
-    size_t sample_count;
+    size_t sample_count;         // Total samples written (for position tracking)
     long data_chunk_pos;
-    double lowpass_state;  // Filter state (previous output sample)
+    double lowpass_state;        // Filter state (previous output sample)
+    MarkerList *markers;         // NULL if markers disabled
 } WavWriter;
 
 // =============================================================================
@@ -113,6 +142,28 @@ WaveformConfig createDefaultWaveform(void);
 // Validate WAV format settings
 // Returns true if valid, false otherwise
 bool validateWavFormat(const WavFormat *format);
+
+// =============================================================================
+// Marker Management
+// =============================================================================
+
+// Create a new empty marker list
+// Returns NULL on allocation failure
+MarkerList* createMarkerList(void);
+
+// Add a marker to the list
+// Returns false on allocation failure
+// Description will be truncated to 255 characters if too long
+bool addMarker(MarkerList *list, size_t sample_pos, 
+               MarkerCategory category, const char *description);
+
+// Free marker list and all associated memory
+void freeMarkerList(MarkerList *list);
+
+// Enable marker generation for a WAV writer
+// Must be called after createWavFile() and before writing audio
+// Returns false on allocation failure
+bool enableMarkers(WavWriter *writer);
 
 // =============================================================================
 // WAV File Management
@@ -202,5 +253,20 @@ bool writeSync(WavWriter *writer, size_t bit_count, const WaveformConfig *config
 // If duration_seconds is not NULL, stores the WAV duration in seconds
 bool convertCasToWav(const char *cas_filename, const char *wav_filename, 
                      const WaveformConfig *config, bool verbose, double *duration_seconds);
+
+// =============================================================================
+// Audio Estimation - Duration and Size Calculations
+// =============================================================================
+
+// Calculate estimated audio duration for a CAS container at specified baud rate
+// This mimics the WAV generation logic including silence periods
+// Returns duration in seconds
+double calculateAudioDuration(const void *container, uint16_t baud_rate, 
+                             float long_silence, float short_silence);
+
+// Calculate estimated WAV file size for a given duration and sample rate
+// Assumes 8-bit mono format
+// Returns size in bytes (including 44-byte WAV header)
+size_t calculateWavFileSize(double duration_seconds, uint32_t sample_rate);
 
 #endif // WAVLIB_H

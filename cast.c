@@ -13,6 +13,7 @@ static int cmd_export(int argc, char *argv[]);
 
 static int cmd_convert(int argc, char *argv[]);
 static int cmd_profile(int argc, char *argv[]);
+static int cmd_play(int argc, char *argv[]);
 
 // Command structure
 typedef struct {
@@ -28,6 +29,7 @@ static const Command commands[] = {
     {"export", cmd_export, "Export file(s) from container"},
     {"convert", cmd_convert, "Convert CAS to WAV audio"},
     {"profile", cmd_profile, "List or show audio profiles"},
+    {"play", cmd_play, "Play WAV file with marker display"},
     {NULL, NULL, NULL}
 };
 
@@ -95,6 +97,8 @@ static void print_convert_help(void) {
     printf("  -l, --lowpass [freq]    Enable low-pass filter [default cutoff: 6000 Hz]\n");
     printf("                          Reduces harmonics for cleaner playback from computer\n");
     printf("                          Useful frequencies: 5000-7000 Hz (above max 4800 Hz signal)\n");
+    printf("  -m, --markers           Add cue point markers to WAV file for timeline tracking\n");
+    printf("                          Markers show file boundaries, silence, and sync signals\n");
     printf("  -v, --verbose           Verbose output\n");
     printf("  -h, --help              Show this help message\n\n");
     printf("Examples:\n");
@@ -193,15 +197,7 @@ static int cmd_info(int argc, char *argv[]) {
 
     input_file = argv[optind];
 
-    // Print parsed options (boilerplate)
-    printf("Command: info\n");
-    printf("  Input file: %s\n", input_file);
-    printf("  Verbose: %s\n", verbose ? "yes" : "no");
-
-    // TODO: Implement actual info functionality
-    printf("\n[TODO: Show statistics for %s]\n", input_file);
-
-    return 0;
+    return execute_info(input_file, verbose);
 }
 
 static int cmd_export(int argc, char *argv[]) {
@@ -266,7 +262,7 @@ static int cmd_convert(int argc, char *argv[]) {
     const char *profile_name = NULL;
     uint16_t baud_rate = 1200;
     uint32_t sample_rate = 43200;
-    WaveformType waveform_type = WAVE_TRAPEZOID;
+    WaveformType waveform_type = WAVE_SQUARE;
     uint16_t channels = 1;
     uint16_t bits_per_sample = 8;
     uint8_t amplitude = 120;
@@ -275,6 +271,7 @@ static int cmd_convert(int argc, char *argv[]) {
     float short_silence = 1.0f;
     bool enable_lowpass = false;
     uint16_t lowpass_cutoff_hz = 6000;
+    bool enable_markers = false;
     bool verbose = false;
     
     // Track which options were explicitly set (for profile override)
@@ -297,13 +294,14 @@ static int cmd_convert(int argc, char *argv[]) {
         {"leader", required_argument, 0, 't'},
         {"profile", required_argument, 0, 'p'},
         {"lowpass", optional_argument, 0, 'l'},
+        {"markers", no_argument, 0, 'm'},
         {"verbose", no_argument, 0, 'v'},
         {"help", no_argument, 0, 'h'},
         {0, 0, 0, 0}
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "b:s:w:c:d:a:r:t:p:l::vh", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "b:s:w:c:d:a:r:t:p:l::mvh", long_options, NULL)) != -1) {
         switch (opt) {
             case 'b':
                 baud_rate = atoi(optarg);
@@ -378,6 +376,9 @@ static int cmd_convert(int argc, char *argv[]) {
                     }
                 }
                 break;
+            case 'm':
+                enable_markers = true;
+                break;
             case 'v':
                 verbose = true;
                 break;
@@ -440,7 +441,8 @@ static int cmd_convert(int argc, char *argv[]) {
                           waveform_type, channels, bits_per_sample, amplitude,
                           trapezoid_rise_percent,
                           long_silence, short_silence,
-                          enable_lowpass, lowpass_cutoff_hz, verbose);
+                          enable_lowpass, lowpass_cutoff_hz,
+                          enable_markers, verbose);
 }
 
 int main(int argc, char *argv[]) {
@@ -522,3 +524,58 @@ static int cmd_profile(int argc, char *argv[]) {
     
     return execute_profile(profile_name, verbose);
 }
+
+static void print_play_help(void) {
+    printf("Usage: cast play <file.wav> [options]\n\n");
+    printf("Play a WAV file with real-time marker display.\n");
+    printf("Shows loading progress, current file/block, and recent activity.\n\n");
+    printf("Options:\n");
+    printf("  -v, --verbose     Verbose output\n");
+    printf("  -h, --help        Show this help message\n\n");
+    printf("Interactive Controls:\n");
+    printf("  Space       - Play/Pause\n");
+    printf("  Left/Right  - Seek -5s/+5s\n");
+    printf("  Up/Down     - Volume +10%%/-10%%\n");
+    printf("  h           - Toggle help display\n");
+    printf("  q           - Quit\n\n");
+    printf("Examples:\n");
+    printf("  cast play output.wav              # Play WAV file\n");
+    printf("  cast play disc.wav -v             # Play with verbose output\n");
+}
+
+static int cmd_play(int argc, char *argv[]) {
+    bool verbose = false;
+    
+    struct option long_options[] = {
+        {"verbose", no_argument, 0, 'v'},
+        {"help", no_argument, 0, 'h'},
+        {0, 0, 0, 0}
+    };
+    
+    int opt;
+    optind = 1;  // Reset getopt
+    while ((opt = getopt_long(argc, argv, "vh", long_options, NULL)) != -1) {
+        switch (opt) {
+            case 'v':
+                verbose = true;
+                break;
+            case 'h':
+                print_play_help();
+                return 0;
+            default:
+                print_play_help();
+                return 1;
+        }
+    }
+    
+    // Check for input file
+    if (optind >= argc) {
+        fprintf(stderr, "Error: WAV file required\n\n");
+        print_play_help();
+        return 1;
+    }
+    
+    const char *filename = argv[optind];
+    return execute_play(filename, verbose);
+}
+

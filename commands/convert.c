@@ -74,7 +74,7 @@ int execute_convert(const char *input_file, const char *output_file,
                     uint8_t trapezoid_rise_percent,
                     float long_silence, float short_silence,
                     bool enable_lowpass, uint16_t lowpass_cutoff_hz,
-                    bool verbose) {
+                    bool enable_markers, bool verbose) {
     
     // Validate all parameters
     if (!validateBaudRate(baud_rate)) return 1;
@@ -112,6 +112,7 @@ int execute_convert(const char *input_file, const char *output_file,
         }
         printf("\n");
         printf("  Leader timing: %.1fs / %.1fs (long/short)\n", long_silence, short_silence);
+        printf("  Cue markers:   %s\n", enable_markers ? "enabled" : "disabled");
         printf("\n");
     }
     
@@ -140,6 +141,7 @@ int execute_convert(const char *input_file, const char *output_file,
     waveform.short_silence = short_silence;
     waveform.enable_lowpass = enable_lowpass;
     waveform.lowpass_cutoff_hz = lowpass_cutoff_hz;
+    waveform.enable_markers = enable_markers;
     
     // Read and verify CAS file first
     size_t file_size;

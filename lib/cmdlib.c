@@ -194,3 +194,20 @@ bool writeFileData(const char *filename, const cas_File *file, bool verbose, boo
     
     return true;
 }
+
+void formatBytes(size_t bytes, char *buffer, size_t buffer_size) {
+    if (bytes < 1024) {
+        snprintf(buffer, buffer_size, "%zu bytes", bytes);
+    } else if (bytes < 1024 * 1024) {
+        snprintf(buffer, buffer_size, "%.1f KB", bytes / 1024.0);
+    } else {
+        snprintf(buffer, buffer_size, "%.1f MB", bytes / (1024.0 * 1024.0));
+    }
+}
+
+void formatDuration(double seconds, char *buffer, size_t buffer_size) {
+    int total_secs = (int)(seconds + 0.5);  // Round to nearest second
+    int minutes = total_secs / 60;
+    int secs = total_secs % 60;
+    snprintf(buffer, buffer_size, "%d:%02d", minutes, secs);
+}
