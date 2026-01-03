@@ -294,19 +294,23 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
 
     // Static info: Tape summary
     draw_left_border(y);
-    int file_count = 0;
-    for (size_t i = 0; markers && i < markers->count; i++) {
-        if (markers->markers[i].category == MARKER_STRUCTURE) {
-            const char *desc = markers->markers[i].description;
-            if (strstr(desc, "File ") && strstr(desc, "/") && strstr(desc, ":")) {
-                const char *slash = strstr(desc, "/");
-                if (slash) {
-                    sscanf(slash + 1, "%d", &file_count);
+    if (markers) {
+        int file_count = 0;
+        for (size_t i = 0; i < markers->count; i++) {
+            if (markers->markers[i].category == MARKER_STRUCTURE) {
+                const char *desc = markers->markers[i].description;
+                if (strstr(desc, "File ") && strstr(desc, "/") && strstr(desc, ":")) {
+                    const char *slash = strstr(desc, "/");
+                    if (slash) {
+                        sscanf(slash + 1, "%d", &file_count);
+                    }
                 }
             }
         }
+        printf_left(y, 2, COLOR_INFO, "Tape: %d files \xE2\x80\xA2 1200 bps", file_count);
+    } else {
+        print_left(y, 2, "Mode: Basic audio playback", COLOR_INFO);
     }
-    printf_left(y, 2, COLOR_INFO, "Tape: %d files \xE2\x80\xA2 1200 bps", file_count);
     y++;
 
     // Static info: Audio format
@@ -343,7 +347,8 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
             snprintf(buf, sizeof(buf), "[%6.2fs] %s", m->time, clean_desc);
             print_right(right_y, SPLIT_COL + 2, buf, COLOR_VALUE);
         } else if (i == 0 && state->detail_count == 0) {
-            print_right(right_y, SPLIT_COL + 2, "(none)", COLOR_DIM);
+            const char *msg = markers ? "(none)" : "(no markers - basic playback)";
+            print_right(right_y, SPLIT_COL + 2, msg, COLOR_DIM);
         } else {
             fill_line(right_y, SPLIT_COL + 1, TOTAL_WIDTH - 1);
         }
@@ -377,7 +382,7 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
     draw_left_border(y);
     print_left(y, 2, "Press 'h' for help", COLOR_DIM);
     draw_middle_border(y);
-    print_right(y, SPLIT_COL + 2, "github.com/xesco · © 2026", COLOR_DIM);
+    print_right_aligned(y, "github.com/xesco · © 2026", COLOR_DIM);
     draw_right_border(y);
     y++;
 
@@ -415,15 +420,8 @@ int execute_play(const char *filename, bool verbose) {
     tb_set_output_mode(TB_OUTPUT_NORMAL);
     tb_hide_cursor();
 
-    // Read markers
+    // Read markers (optional - works without them)
     MarkerListInfo *markers = readWavMarkers(filename);
-    if (!markers || markers->count == 0) {
-        tb_shutdown();
-        destroyAudioPlayer(player);
-        fprintf(stderr, "Error: WAV file has no markers.\n");
-        fprintf(stderr, "Hint: Use 'cast convert -m' to generate a WAV with markers.\n");
-        return 1;
-    }
 
     // Initialize display state
     DisplayState state = {0};

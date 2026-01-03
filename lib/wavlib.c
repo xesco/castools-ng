@@ -101,7 +101,7 @@ WavFormat createDefaultWavFormat(void) {
 
 WaveformConfig createDefaultWaveform(void) {
     WaveformConfig config = {
-        .type = WAVE_SQUARE,
+        .type = WAVE_SINE,
         .amplitude = 120,
         .baud_rate = 1200,  // Standard MSX baud rate
         .sample_rate = 43200,  // Default MSX sample rate

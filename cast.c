@@ -278,8 +278,8 @@ static int cmd_convert(int argc, char *argv[]) {
     bool explicit_baud = false;
     bool explicit_sample = false;
     bool explicit_wave = false;
-    bool explicit_amplitude = false;
     bool explicit_rise = false;
+    bool explicit_amplitude = false;
     bool explicit_leader = false;
     bool explicit_lowpass = false;
 
@@ -432,7 +432,7 @@ static int cmd_convert(int argc, char *argv[]) {
     }
 
     // Validate that --rise is only used with trapezoid waveform
-    if (trapezoid_rise_percent != 10 && waveform_type != WAVE_TRAPEZOID) {
+    if (explicit_rise && waveform_type != WAVE_TRAPEZOID) {
         fprintf(stderr, "Error: --rise option requires --wave trapezoid\n");
         return 1;
     }

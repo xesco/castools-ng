@@ -52,6 +52,7 @@ void print_left(int y, int x, const char *text, uintattr_t fg);
 void printf_left(int y, int x, uintattr_t fg, const char *fmt, ...);
 void print_right(int y, int x, const char *text, uintattr_t fg);
 void printf_right(int y, int x, uintattr_t fg, const char *fmt, ...);
+void print_right_aligned(int y, const char *text, uintattr_t fg);
 
 // =============================================================================
 // Box Drawing

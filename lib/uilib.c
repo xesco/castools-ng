@@ -77,6 +77,11 @@ void printf_right(int y, int x, uintattr_t fg, const char *fmt, ...) {
     print_right(y, x, buf, fg);
 }
 
+void print_right_aligned(int y, const char *text, uintattr_t fg) {
+    int x = TOTAL_WIDTH - 2 - strlen(text);  // Right-aligned with 1 space margin
+    print_right(y, x, text, fg);
+}
+
 // =============================================================================
 // Box Drawing
 // =============================================================================
