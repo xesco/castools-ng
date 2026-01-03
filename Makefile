@@ -14,7 +14,8 @@ SRCS = cast.c \
        lib/cmdlib.c \
        lib/wavlib.c \
        lib/presetlib.c \
-       lib/playlib.c
+       lib/playlib.c \
+       lib/uilib.c
 
 OBJS = $(SRCS:.c=.o)
 
@@ -35,6 +36,10 @@ $(TARGET): $(OBJS)
 
 # Special rule for play.c to suppress termbox2 library warnings
 commands/play.o: commands/play.c
+	$(CC) $(CFLAGS) -Wno-unused-function -c -o $@ $<
+
+# Special rule for uilib.o to suppress termbox2 library warnings
+lib/uilib.o: lib/uilib.c
 	$(CC) $(CFLAGS) -Wno-unused-function -c -o $@ $<
 
 # Test targets

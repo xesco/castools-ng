@@ -2,8 +2,7 @@
  * play.c - Play WAV file with real-time marker display
  */
 
-#define TB_IMPL
-#include "../lib/termbox2.h"
+#include "../lib/uilib.h"
 #include "../lib/playlib.h"
 #include "commands.h"
 #include <stdio.h>
@@ -28,120 +27,6 @@ typedef struct {
     RecentMarker detail_markers[16];
     int detail_count;
 } DisplayState;
-
-// =============================================================================
-// Layout Constants
-// =============================================================================
-
-#define TOTAL_WIDTH  100
-#define LEFT_WIDTH   50
-#define RIGHT_WIDTH  48
-#define SPLIT_COL    LEFT_WIDTH
-#define MAX_ACTIVITIES 16
-
-// Color Scheme
-#define COLOR_BORDER    (TB_CYAN | TB_BOLD)
-#define COLOR_TITLE     (TB_WHITE | TB_BOLD)
-#define COLOR_LABEL     (TB_YELLOW)
-#define COLOR_VALUE     TB_WHITE
-#define COLOR_INFO      TB_CYAN
-#define COLOR_ACTIVITY  TB_GREEN
-#define COLOR_DIM       TB_HI_BLACK
-#define COLOR_PROGRESS  TB_CYAN
-#define COLOR_SEPARATOR TB_BLUE
-
-// =============================================================================
-// Drawing Abstractions
-// =============================================================================
-
-static void draw_hline(int y, int start_x, int end_x, uint32_t ch, uintattr_t fg) {
-    for (int x = start_x; x < end_x; x++) {
-        tb_set_cell(x, y, ch, fg, TB_BLACK);
-    }
-}
-
-static void fill_line(int y, int start_x, int end_x) {
-    for (int x = start_x; x < end_x; x++) {
-        tb_set_cell(x, y, ' ', TB_WHITE, TB_BLACK);
-    }
-}
-
-static void draw_left_border(int y) {
-    tb_set_cell(0, y, 0x2551, COLOR_BORDER, TB_BLACK);  // ║
-}
-
-static void draw_middle_border(int y) {
-    tb_set_cell(SPLIT_COL, y, 0x2551, COLOR_BORDER, TB_BLACK);  // ║
-}
-
-static void draw_right_border(int y) {
-    tb_set_cell(TOTAL_WIDTH - 1, y, 0x2551, COLOR_BORDER, TB_BLACK);  // ║
-}
-
-static void draw_row_borders(int y) {
-    draw_left_border(y);
-    draw_middle_border(y);
-    draw_right_border(y);
-}
-
-static void print_left(int y, int x, const char *text, uintattr_t fg) {
-    tb_print(x, y, fg, TB_BLACK, text);
-    int len = strlen(text);
-    fill_line(y, x + len, SPLIT_COL);
-}
-
-static void printf_left(int y, int x, uintattr_t fg, const char *fmt, ...) {
-    char buf[256];
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, args);
-    va_end(args);
-    tb_print(x, y, fg, TB_BLACK, buf);
-    int len = strlen(buf);
-    fill_line(y, x + len, SPLIT_COL);
-}
-
-static void print_right(int y, int x, const char *text, uintattr_t fg) {
-    int max_len = TOTAL_WIDTH - 1 - x;
-    char buf[256];
-    snprintf(buf, sizeof(buf), "%.*s", max_len, text);
-    tb_print(x, y, fg, TB_BLACK, buf);
-    int len = strlen(buf);
-    fill_line(y, x + len, TOTAL_WIDTH - 1);
-}
-
-static void printf_right(int y, int x, uintattr_t fg, const char *fmt, ...) {
-    char buf[256];
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, args);
-    va_end(args);
-    print_right(y, x, buf, fg);
-}
-
-static void draw_progress_bar(int y, int start_x, int end_x, double current, double total) {
-    int bar_width = end_x - start_x - 10;  // Reserve space for "[ ] XX.X%"
-    if (bar_width < 5) return;
-    if (total <= 0) total = 1.0;  // Avoid division by zero
-    if (current < 0) current = 0;
-    if (current > total) current = total;
-
-    double percentage = (current / total * 100.0);
-    int filled = (int)((current / total) * bar_width);
-    if (filled > bar_width) filled = bar_width;
-    if (filled < 0) filled = 0;
-
-    // Draw progress bar
-    tb_set_cell(start_x, y, '[', TB_WHITE, TB_BLACK);
-    for (int i = 0; i < bar_width; i++) {
-        char ch = ' ';
-        if (i < filled) ch = '=';
-        else if (i == filled) ch = '>';
-        tb_set_cell(start_x + 1 + i, y, ch, COLOR_PROGRESS, TB_BLACK);
-    }
-    tb_set_cell(start_x + 1 + bar_width, y, ']', TB_WHITE, TB_BLACK);
-    tb_printf(start_x + 2 + bar_width, y, TB_WHITE, TB_BLACK, " %.1f%%", percentage);
-}
 
 // =============================================================================
 // Display State Management
@@ -228,23 +113,11 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
         int box_right = 80;
 
         y = 3;
-        // Top border
-        tb_set_cell(box_left, y, 0x2554, COLOR_BORDER, TB_BLACK);  // ╔
-        draw_hline(y, box_left + 1, box_right, 0x2550, COLOR_BORDER);  // ═
-        tb_set_cell(box_right, y, 0x2557, COLOR_BORDER, TB_BLACK);  // ╗
-        y++;
-
-        // Title
-        tb_set_cell(box_left, y, 0x2551, COLOR_BORDER, TB_BLACK);  // ║
-        tb_printf(box_left + 2, y, COLOR_TITLE, TB_BLACK, "MSX Tape Player - Keyboard Shortcuts");
-        tb_set_cell(box_right, y, 0x2551, COLOR_BORDER, TB_BLACK);  // ║
-        y++;
-
-        // Separator
-        tb_set_cell(box_left, y, 0x2560, COLOR_BORDER, TB_BLACK);  // ╠
-        draw_hline(y, box_left + 1, box_right, 0x2550, COLOR_BORDER);  // ═
-        tb_set_cell(box_right, y, 0x2563, COLOR_BORDER, TB_BLACK);  // ╣
-        y++;
+        draw_box_top(y++, box_left, box_right, COLOR_BORDER);
+        
+        draw_box_line(y++, box_left, box_right, "MSX Tape Player - Keyboard Shortcuts", COLOR_TITLE);
+        
+        draw_box_separator(y++, box_left, box_right, COLOR_BORDER);
 
         // Help content
         const char *help_lines[] = {
@@ -256,36 +129,14 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
         };
 
         for (size_t i = 0; i < sizeof(help_lines) / sizeof(help_lines[0]); i++) {
-            tb_set_cell(box_left, y, 0x2551, COLOR_BORDER, TB_BLACK);  // ║
-            tb_print(box_left + 1, y, COLOR_VALUE, TB_BLACK, help_lines[i]);
-            for (int x = box_left + 1 + strlen(help_lines[i]); x < box_right; x++) {
-                tb_set_cell(x, y, ' ', COLOR_VALUE, TB_BLACK);
-            }
-            tb_set_cell(box_right, y, 0x2551, COLOR_BORDER, TB_BLACK);  // ║
-            y++;
+            draw_box_line(y++, box_left, box_right, help_lines[i], COLOR_VALUE);
         }
 
-        // Empty line
-        tb_set_cell(box_left, y, 0x2551, COLOR_BORDER, TB_BLACK);  // ║
-        for (int x = box_left + 1; x < box_right; x++) {
-            tb_set_cell(x, y, ' ', TB_WHITE, TB_BLACK);
-        }
-        tb_set_cell(box_right, y, 0x2551, COLOR_BORDER, TB_BLACK);  // ║
-        y++;
+        draw_box_line(y++, box_left, box_right, NULL, TB_WHITE);  // Empty line
+        
+        draw_box_line(y++, box_left, box_right, "Press 'h' again to close help...", COLOR_DIM);
 
-        // Footer
-        tb_set_cell(box_left, y, 0x2551, COLOR_BORDER, TB_BLACK);  // ║
-        tb_printf(box_left + 2, y, COLOR_DIM, TB_BLACK, "Press 'h' again to close help...");
-        for (int x = box_left + 2 + 34; x < box_right; x++) {
-            tb_set_cell(x, y, ' ', TB_WHITE, TB_BLACK);
-        }
-        tb_set_cell(box_right, y, 0x2551, COLOR_BORDER, TB_BLACK);  // ║
-        y++;
-
-        // Bottom border
-        tb_set_cell(box_left, y, 0x255A, COLOR_BORDER, TB_BLACK);  // ╚
-        draw_hline(y, box_left + 1, box_right, 0x2550, COLOR_BORDER);  // ═
-        tb_set_cell(box_right, y, 0x255D, COLOR_BORDER, TB_BLACK);  // ╝
+        draw_box_bottom(y, box_left, box_right, COLOR_BORDER);
 
         tb_present();
         return;
@@ -314,11 +165,7 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
     // ═══════════════════════════════════════════════════════════════════════
     // Divider after titles
     // ═══════════════════════════════════════════════════════════════════════
-    tb_set_cell(0, y, 0x2560, TB_CYAN | TB_BOLD, TB_BLACK);  // ╠
-    draw_hline(y, 1, SPLIT_COL, 0x2550, TB_CYAN | TB_BOLD);  // ═
-    tb_set_cell(SPLIT_COL, y, 0x256C, TB_CYAN | TB_BOLD, TB_BLACK);  // ╬
-    draw_hline(y, SPLIT_COL + 1, TOTAL_WIDTH - 1, 0x2550, TB_CYAN | TB_BOLD);  // ═
-    tb_set_cell(TOTAL_WIDTH - 1, y, 0x2563, TB_CYAN | TB_BOLD, TB_BLACK);  // ╣
+    draw_full_separator(y, TB_CYAN | TB_BOLD);
     y++;
 
     int content_start_y = y;
@@ -340,8 +187,7 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
     y++;
 
     // Empty line
-    draw_left_border(y);
-    fill_line(y, 1, SPLIT_COL);
+    draw_left_empty_line(y);
     y++;
 
     // Tape time (current / remaining / total)
@@ -355,27 +201,18 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
     y++;
 
     // Tape progress bar
-    draw_left_border(y);
-    draw_progress_bar(y, 2, SPLIT_COL - 1, current, total);
+    draw_left_progress(y, current, total);
     y++;
 
     // Separator
-    draw_left_border(y);
-    draw_hline(y, 1, SPLIT_COL, 0x2500, TB_BLUE);  // ─
+    draw_left_separator(y);
     y++;
 
     // Current activity (what's happening right now - sync, silence, etc.)
-    draw_left_border(y);
-    print_left(y, 2, "Now: ", COLOR_LABEL);
-    if (state->current_activity) {
-        const char *desc = state->current_activity->description;
-        const char *clean_desc = strstr(desc, "] ");
-        if (clean_desc) clean_desc += 2;  // Skip "[DETAIL] " or "[STRUCTURE] "
-        else clean_desc = desc;
-        print_left(y, 7, clean_desc, COLOR_ACTIVITY);
-    } else {
-        print_left(y, 7, "(waiting...)", COLOR_DIM);
-    }
+    const char *activity_value = state->current_activity ? 
+        strip_marker_prefix(state->current_activity->description) : "(waiting...)";
+    uint32_t activity_color = state->current_activity ? COLOR_ACTIVITY : COLOR_DIM;
+    draw_left_label_value(y, "Now: ", activity_value, activity_color);
     y++;
 
     // File name
@@ -395,8 +232,7 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
     y++;
 
     // Blank line for visual separation
-    draw_left_border(y);
-    fill_line(y, 1, SPLIT_COL);
+    draw_left_empty_line(y);
     y++;
 
     // Block type
@@ -424,7 +260,6 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
     y++;
 
     // Block progress bar
-    draw_left_border(y);
     // Calculate block progress based on current position within block
     double block_current = 0.0;
     double block_total = 1.0;
@@ -450,12 +285,11 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
             }
         }
     }
-    draw_progress_bar(y, 2, SPLIT_COL - 1, block_current, block_total);
+    draw_left_progress(y, block_current, block_total);
     y++;
 
     // Separator
-    draw_left_border(y);
-    draw_hline(y, 1, SPLIT_COL, 0x2500, COLOR_SEPARATOR);  // ─
+    draw_left_separator(y);
     y++;
 
     // Static info: Tape summary
@@ -504,11 +338,7 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
 
         if (i < state->detail_count) {
             RecentMarker *m = &state->detail_markers[i];
-            // Remove "[DETAIL] " prefix if present
-            const char *desc = m->description;
-            const char *clean_desc = strstr(desc, "] ");
-            if (clean_desc) clean_desc += 2;  // Skip "] "
-            else clean_desc = desc;
+            const char *clean_desc = strip_marker_prefix(m->description);
             char buf[128];
             snprintf(buf, sizeof(buf), "[%6.2fs] %s", m->time, clean_desc);
             print_right(right_y, SPLIT_COL + 2, buf, COLOR_VALUE);
