@@ -262,7 +262,7 @@ static int cmd_convert(int argc, char *argv[]) {
     const char *profile_name = NULL;
     uint16_t baud_rate = 1200;
     uint32_t sample_rate = 43200;
-    WaveformType waveform_type = WAVE_SQUARE;
+    WaveformType waveform_type = WAVE_SINE;
     uint16_t channels = 1;
     uint16_t bits_per_sample = 8;
     uint8_t amplitude = 120;
