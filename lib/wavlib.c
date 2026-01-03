@@ -362,11 +362,11 @@ bool writePulse(WavWriter *writer, uint16_t frequency, const WaveformConfig *con
     }
     
     // Calculate samples per complete cycle
-    size_t samples_per_cycle = writer->format.sample_rate / frequency;
+    size_t samples_per_cycle = config->sample_rate / frequency;
     
     if (samples_per_cycle == 0) {
         fprintf(stderr, "Error: Frequency %u Hz too high for sample rate %u Hz\n", 
-                frequency, writer->format.sample_rate);
+                frequency, config->sample_rate);
         return false;
     }
     
@@ -682,8 +682,9 @@ bool convertCasToWav(const char *cas_filename, const char *wav_filename,
         printf("  Files in container: %zu\n", container.file_count);
     }
     
-    // Create WAV file
+    // Create WAV file with sample rate from config
     WavFormat format = createDefaultWavFormat();
+    format.sample_rate = config->sample_rate;  // Use sample rate from config
     WavWriter *writer = createWavFile(wav_filename, &format);
     if (!writer) {
         fprintf(stderr, "Error: Failed to create WAV file\n");

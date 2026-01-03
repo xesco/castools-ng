@@ -131,6 +131,7 @@ int execute_convert(const char *input_file, const char *output_file,
     waveform.type = waveform_type;
     waveform.amplitude = amplitude;
     waveform.baud_rate = baud_rate;
+    waveform.sample_rate = sample_rate;
     waveform.custom_samples = NULL;
     waveform.custom_length = 0;
     waveform.trapezoid_rise_percent = trapezoid_rise_percent;

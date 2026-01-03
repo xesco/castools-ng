@@ -71,6 +71,7 @@ typedef struct {
     WaveformType type;              // Type of waveform to generate
     uint8_t amplitude;              // Peak amplitude for this waveform
     uint16_t baud_rate;             // MSX baud rate: 1200 (standard) or 2400 (turbo)
+    uint32_t sample_rate;           // Sample rate in Hz (must be divisible by 1200)
     const uint8_t *custom_samples;  // For WAVE_CUSTOM: pre-calculated samples
     size_t custom_length;           // Number of samples in custom waveform
     
