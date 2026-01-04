@@ -538,7 +538,7 @@ static int cmd_profile(int argc, char *argv[]) {
 static void print_play_help(void) {
     printf("Usage: cast play <file.wav> [options]\n\n");
     printf("Play a WAV file with real-time marker display.\n");
-    printf("Shows loading progress, current file/block, and recent activity.\n\n");
+    printf("Shows loading progress, current file/block, and activity log.\n\n");
     printf("Options:\n");
     printf("  -v, --verbose     Verbose output\n");
     printf("  -h, --help        Show this help message\n\n");

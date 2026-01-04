@@ -157,7 +157,7 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
     draw_left_border(y);
     print_left(y, 2, "MSX Tape Player", COLOR_TITLE);
     draw_middle_border(y);
-    print_right(y, SPLIT_COL + 2, "Recent Activity", COLOR_TITLE);
+    print_right(y, SPLIT_COL + 2, "Activity Log", COLOR_TITLE);
     draw_right_border(y);
     y++;
 
@@ -289,7 +289,7 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
     }
     
     // Draw custom progress bar with percentage and byte count
-    int bar_width = SPLIT_COL - 1 - 2 - 24;  // Reserve space for " 100.0% (12345/67890)"
+    int bar_width = SPLIT_COL - 1 - 2 - 19;  // Reserve space for " 100.0% (12345/67890)"
     if (bar_width < 5) bar_width = 5;
     
     double ratio = block_total > 0 ? block_current / block_total : 0;
@@ -358,7 +358,7 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
     
     // Draw sync progress bar with time instead of percentage
     draw_left_border(y);
-    int sync_bar_width = SPLIT_COL - 1 - 2 - 24;  // Same as data bar width
+    int sync_bar_width = SPLIT_COL - 1 - 2 - 19;  // Same as data bar width
     if (sync_bar_width < 5) sync_bar_width = 5;
     
     double sync_ratio = sync_total > 0 ? sync_current / sync_total : 0;
@@ -423,7 +423,7 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
     int left_end_y = y;
 
     // ═══════════════════════════════════════════════════════════════════════
-    // RIGHT PANEL: Recent activity
+    // RIGHT PANEL: Activity log
     // ═══════════════════════════════════════════════════════════════════════
 
     int right_y = content_start_y;
