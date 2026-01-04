@@ -26,6 +26,7 @@ typedef struct {
     const MarkerInfo *current_activity;  // Most recent marker of any type
     RecentMarker detail_markers[16];
     int detail_count;
+    int seek_resolution;  // 1-5: seek sensitivity (1=milliseconds, 5=seconds)
 } DisplayState;
 
 // =============================================================================
@@ -125,10 +126,16 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
         draw_box_separator(y++, box_left, box_right, COLOR_BORDER);
 
         // Help content
+        char seek_info[60];
+        const char *resolution_names[] = {"1ms", "10ms", "100ms", "1s", "5s"};
+        snprintf(seek_info, sizeof(seek_info), "  LEFT/RIGHT - Seek -/+ (%s steps)", 
+                resolution_names[state->seek_resolution - 1]);
+        
         const char *help_lines[] = {
             "  SPACE      - Play / Pause",
             "  UP/DOWN    - Volume +/-",
-            "  LEFT/RIGHT - Seek -/+ 5 seconds",
+            seek_info,
+            "  1-5        - Seek resolution (1=fine, 5=coarse)",
             "  H          - Toggle this help",
             "  Q or ESC   - Quit",
         };
@@ -189,6 +196,15 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
     // Volume
     draw_left_border(y);
     printf_left(y, 2, COLOR_VALUE, "Volume: %.0f%%", player->volume * 100);
+    y++;
+    
+    // Seek resolution
+    draw_left_border(y);
+    const char *resolution_names[] = {"1ms", "10ms", "100ms", "1sec", "5sec"};
+    const char *resolution_desc[] = {"finest", "fine", "medium", "coarse", "coarsest"};
+    printf_left(y, 2, COLOR_VALUE, "Seek:   %s (%s)", 
+                resolution_names[state->seek_resolution - 1],
+                resolution_desc[state->seek_resolution - 1]);
     y++;
 
     // Empty line
@@ -523,6 +539,7 @@ int execute_play(const char *filename, bool verbose) {
 
     // Initialize display state
     DisplayState state = {0};
+    state.seek_resolution = 3;  // Default to medium resolution (100ms)
 
     // Start playback
     playAudio(player);
@@ -539,6 +556,10 @@ int execute_play(const char *filename, bool verbose) {
         // Render display
         renderDisplay(player, &state, markers, show_help);
 
+        // Get seek step based on resolution
+        const double seek_steps[] = {0.001, 0.01, 0.1, 1.0, 5.0};
+        double seek_step = seek_steps[state.seek_resolution - 1];
+
         // Check for input (non-blocking with 50ms timeout)
         struct tb_event ev;
         int poll_ret = tb_peek_event(&ev, 50);
@@ -549,6 +570,9 @@ int execute_play(const char *filename, bool verbose) {
                 running = false;
             } else if (ev.ch == 'h' || ev.ch == 'H') {
                 show_help = !show_help;
+            } else if (ev.ch >= '1' && ev.ch <= '5') {
+                // Set seek resolution (1-5)
+                state.seek_resolution = ev.ch - '0';
             } else if (!show_help) {
                 // Only handle playback controls when help is not shown
                 if (ev.ch == ' ') {
@@ -562,9 +586,9 @@ int execute_play(const char *filename, bool verbose) {
                 } else if (ev.key == TB_KEY_ARROW_DOWN) {
                     setVolume(player, player->volume - 0.1);
                 } else if (ev.key == TB_KEY_ARROW_RIGHT) {
-                    seekAudio(player, current_time + 5.0);
+                    seekAudio(player, current_time + seek_step);
                 } else if (ev.key == TB_KEY_ARROW_LEFT) {
-                    double new_pos = current_time - 5.0;
+                    double new_pos = current_time - seek_step;
                     if (new_pos < 0.0) new_pos = 0.0;
                     seekAudio(player, new_pos);
                 }

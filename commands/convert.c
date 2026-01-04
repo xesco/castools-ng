@@ -76,12 +76,37 @@ int execute_convert(const char *input_file, const char *output_file,
                     bool enable_lowpass, uint16_t lowpass_cutoff_hz,
                     bool enable_markers, bool verbose) {
     
+    // Generate output filename if not provided
+    char *generated_output = NULL;
+    if (!output_file) {
+        generated_output = generateOutputFilename(input_file, "wav");
+        if (!generated_output) {
+            return 1;
+        }
+        output_file = generated_output;
+    }
+    
     // Validate all parameters
-    if (!validateBaudRate(baud_rate)) return 1;
-    if (!validateSampleRate(sample_rate)) return 1;
-    if (!validateBitDepth(bits_per_sample)) return 1;
-    if (!validateChannels(channels)) return 1;
-    if (!validateAmplitude(amplitude, bits_per_sample)) return 1;
+    if (!validateBaudRate(baud_rate)) {
+        if (generated_output) free(generated_output);
+        return 1;
+    }
+    if (!validateSampleRate(sample_rate)) {
+        if (generated_output) free(generated_output);
+        return 1;
+    }
+    if (!validateBitDepth(bits_per_sample)) {
+        if (generated_output) free(generated_output);
+        return 1;
+    }
+    if (!validateChannels(channels)) {
+        if (generated_output) free(generated_output);
+        return 1;
+    }
+    if (!validateAmplitude(amplitude, bits_per_sample)) {
+        if (generated_output) free(generated_output);
+        return 1;
+    }
     
     if (verbose) {
         printf("=== CAS to WAV Conversion ===\n");
@@ -232,6 +257,10 @@ int execute_convert(const char *input_file, const char *output_file,
     
     free(saved_container.files);
     free(file_data);
+    
+    if (generated_output) {
+        free(generated_output);
+    }
     
     return 0;
 }

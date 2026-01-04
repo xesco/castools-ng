@@ -31,4 +31,8 @@ void formatBytes(size_t bytes, char *buffer, size_t buffer_size);
 // Format seconds into MM:SS format
 void formatDuration(double seconds, char *buffer, size_t buffer_size);
 
+// Generate output filename by replacing extension with new_ext
+// Returns allocated string that must be freed by caller
+char* generateOutputFilename(const char *input_file, const char *new_ext);
+
 #endif // CMDLIB_H

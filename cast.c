@@ -77,9 +77,10 @@ static void print_export_help(void) {
 }
 
 static void print_convert_help(void) {
-    printf("Usage: cast convert <input.cas> <output.wav> [options]\n\n");
+    printf("Usage: cast convert <input.cas> [options]\n\n");
     printf("Convert CAS file to MSX cassette tape WAV audio.\n\n");
     printf("Options:\n");
+    printf("  -o, --output <file>     Output WAV file [default: input name with .wav extension]\n");
     printf("  -b, --baud <rate>       Baud rate: 1200 (standard) or 2400 (turbo) [default: 1200]\n");
     printf("  -s, --sample <rate>     Sample rate in Hz [default: 43200]\n");
     printf("                          Common: 43200, 44100, 48000, 88200, 96000\n");
@@ -107,15 +108,16 @@ static void print_convert_help(void) {
     printf("  -v, --verbose           Verbose output\n");
     printf("  -h, --help              Show this help message\n\n");
     printf("Examples:\n");
-    printf("  cast convert game.cas game.wav\n");
-    printf("  cast convert game.cas game.wav --baud 2400 --wave square\n");
-    printf("  cast convert game.cas game.wav -s 44100 -a 100\n");
-    printf("  cast convert game.cas game.wav --lowpass\n");
-    printf("  cast convert game.cas game.wav --wave trapezoid --rise 20\n");
-    printf("  cast convert game.cas game.wav --leader conservative\n");
-    printf("  cast convert game.cas game.wav --profile computer-direct\n");
-    printf("  cast convert game.cas game.wav --profile default --baud 2400\n");
-    printf("  cast convert game.cas game.wav --lowpass 5500 --wave trapezoid\n");
+    printf("  cast convert game.cas\n");
+    printf("  cast convert game.cas -o output.wav\n");
+    printf("  cast convert game.cas --baud 2400 --wave square\n");
+    printf("  cast convert game.cas -o game.wav -s 44100 -a 100\n");
+    printf("  cast convert game.cas --lowpass\n");
+    printf("  cast convert game.cas --wave trapezoid --rise 20\n");
+    printf("  cast convert game.cas --leader conservative\n");
+    printf("  cast convert game.cas --profile computer-direct\n");
+    printf("  cast convert game.cas --profile default --baud 2400\n");
+    printf("  cast convert game.cas -o output.wav --lowpass 5500 --wave trapezoid\n");
 }
 
 static int cmd_list(int argc, char *argv[]) {
@@ -294,6 +296,7 @@ static int cmd_convert(int argc, char *argv[]) {
     bool explicit_lowpass = false;
 
     struct option long_options[] = {
+        {"output", required_argument, 0, 'o'},
         {"baud", required_argument, 0, 'b'},
         {"sample", required_argument, 0, 's'},
         {"wave", required_argument, 0, 'w'},
@@ -311,8 +314,11 @@ static int cmd_convert(int argc, char *argv[]) {
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "b:s:w:c:d:a:r:t:p:l::mvh", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "o:b:s:w:c:d:a:r:t:p:l::mvh", long_options, NULL)) != -1) {
         switch (opt) {
+            case 'o':
+                output_file = optarg;
+                break;
             case 'b':
                 baud_rate = atoi(optarg);
                 explicit_baud = true;
@@ -401,15 +407,14 @@ static int cmd_convert(int argc, char *argv[]) {
         }
     }
 
-    // Get positional arguments
-    if (optind + 2 > argc) {
-        fprintf(stderr, "Error: Missing required arguments\n\n");
+    // Get input file (required positional argument)
+    if (optind >= argc) {
+        fprintf(stderr, "Error: Missing input file\n\n");
         print_convert_help();
         return 1;
     }
 
     input_file = argv[optind];
-    output_file = argv[optind + 1];
 
     // Apply profile if specified
     if (profile_name) {

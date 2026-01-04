@@ -211,3 +211,28 @@ void formatDuration(double seconds, char *buffer, size_t buffer_size) {
     int secs = total_secs % 60;
     snprintf(buffer, buffer_size, "%d:%02d", minutes, secs);
 }
+
+char* generateOutputFilename(const char *input_file, const char *new_ext) {
+    // Get basename (filename without directory path)
+    const char *basename = strrchr(input_file, '/');
+    basename = basename ? basename + 1 : input_file;
+    
+    // Find the last dot for extension
+    const char *dot = strrchr(basename, '.');
+    size_t name_len = dot ? (size_t)(dot - basename) : strlen(basename);
+    
+    // Calculate total length: name + "." + ext + null
+    size_t output_len = name_len + 1 + strlen(new_ext) + 1;
+    
+    // Allocate buffer
+    char *output = malloc(output_len);
+    if (!output) {
+        fprintf(stderr, "Error: Failed to allocate memory for output filename\n");
+        return NULL;
+    }
+    
+    // Build output filename: basename without extension + new extension
+    snprintf(output, output_len, "%.*s.%s", (int)name_len, basename, new_ext);
+    
+    return output;
+}
