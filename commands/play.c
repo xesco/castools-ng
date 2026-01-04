@@ -75,12 +75,18 @@ static void updateDisplayState(DisplayState *state, const MarkerListInfo *marker
             }
         }
 
-        // Collect ALL markers for event log (both STRUCTURE and DETAIL)
+        // Collect markers for event log, skipping file markers from display
         if (temp_count < 100) {
-            strncpy(temp_details[temp_count].description, m->description, 255);
-            temp_details[temp_count].description[255] = '\0';
-            temp_details[temp_count].time = m->time_seconds;
-            temp_count++;
+            const char *desc = m->description;
+            // Skip "File X/Y: ..." markers from activity log
+            bool is_file_marker = (strstr(desc, "File ") && strstr(desc, "/") && strstr(desc, ":"));
+            
+            if (!is_file_marker) {
+                strncpy(temp_details[temp_count].description, desc, 255);
+                temp_details[temp_count].description[255] = '\0';
+                temp_details[temp_count].time = m->time_seconds;
+                temp_count++;
+            }
         }
     }
 
@@ -289,7 +295,7 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
     }
     
     // Draw custom progress bar with percentage and byte count
-    int bar_width = SPLIT_COL - 1 - 2 - 19;  // Reserve space for " 100.0% (12345/67890)"
+    int bar_width = SPLIT_COL - 1 - 2 - 21;  // Reserve space for " 100.0% (12345/67890)"
     if (bar_width < 5) bar_width = 5;
     
     double ratio = block_total > 0 ? block_current / block_total : 0;
@@ -358,7 +364,7 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
     
     // Draw sync progress bar with time instead of percentage
     draw_left_border(y);
-    int sync_bar_width = SPLIT_COL - 1 - 2 - 19;  // Same as data bar width
+    int sync_bar_width = SPLIT_COL - 1 - 2 - 21;  // Same as data bar width
     if (sync_bar_width < 5) sync_bar_width = 5;
     
     double sync_ratio = sync_total > 0 ? sync_current / sync_total : 0;
