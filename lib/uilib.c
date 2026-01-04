@@ -166,7 +166,7 @@ void draw_full_separator(int y, uint32_t style) {
 // =============================================================================
 
 void draw_progress_bar(int y, int start_x, int end_x, double current, double total) {
-    int bar_width = end_x - start_x - 10;  // Reserve space for "[ ] XX.X%"
+    int bar_width = end_x - start_x - 8;  // Reserve space for " XX.X%"
     if (bar_width < 5) return;
     if (total <= 0) total = 1.0;  // Avoid division by zero
     if (current < 0) current = 0;

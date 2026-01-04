@@ -14,8 +14,8 @@
 // Layout Constants
 // =============================================================================
 
-#define TOTAL_WIDTH  100
-#define LEFT_WIDTH   50
+#define TOTAL_WIDTH  112
+#define LEFT_WIDTH   62
 #define RIGHT_WIDTH  48
 #define SPLIT_COL    LEFT_WIDTH
 #define MAX_ACTIVITIES 16

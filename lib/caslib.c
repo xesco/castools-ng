@@ -133,7 +133,7 @@ static bool readDataBlockHeader(uint8_t *data, size_t *pos, cas_DataBlockHeader 
 
 static size_t findNextCasHeader(uint8_t *data, size_t start_pos, size_t length) {
     // Search for next CAS header starting from start_pos
-    // Note: Headers are NOT always 8-byte aligned (e.g., RUR1.cas has one at 0x9042)
+    // Note: Headers are NOT always 8-byte aligned (e.g., Las Aventuras de Rudolphine Rur has one at 0x9042)
     for (size_t i = start_pos; i + 8 <= length; i++) {
         if (memcmp(data + i, CAS_HEADER, 8) == 0) {
             return i;

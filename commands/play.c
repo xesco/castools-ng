@@ -226,12 +226,8 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
             fill_line(y, 8, SPLIT_COL);
         }
     } else {
-        print_left(y, 8, "(no file)", COLOR_DIM);
+        print_left(y, 8, "(idle)", COLOR_DIM);
     }
-    y++;
-
-    // Blank line for visual separation
-    draw_left_empty_line(y);
     y++;
 
     // Block type
@@ -244,25 +240,32 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
         if (clean_desc) clean_desc += 2;  // Skip "] "
         else clean_desc = desc;
 
-        // Remove "Data " prefix (e.g., "Data block 1/1" -> "block 1/1")
+        // Remove "Data " prefix (e.g., "Data block 1/1 (28994 bytes)" -> "block 1/1 (28994 bytes)")
         if (strncmp(clean_desc, "Data ", 5) == 0) {
             clean_desc += 5;
         }
 
         print_left(y, 8, clean_desc, COLOR_VALUE);
     } else {
-        print_left(y, 8, "(no data)", COLOR_DIM);
+        print_left(y, 8, "(idle)", COLOR_DIM);
     }
     y++;
 
-    // Block progress bar
+    // Block progress bar with byte count
+    draw_left_border(y);
+    
     // Calculate block progress based on current position within block
     double block_current = 0.0;
     double block_total = 1.0;
+    size_t total_bytes = 0;
+    size_t current_bytes = 0;
+    
     if (state->current_block && markers) {
+        // Extract total bytes from description
+        const char *desc = state->current_block->description;
+        sscanf(desc, "%*[^(](%zu bytes)", &total_bytes);
+        
         double block_start = state->current_block->time_seconds;
-        // Find next marker (any type) to get block end time
-        // The block ends when we hit silence/sync after the data
         double block_end = current;
         for (size_t i = 0; i < markers->count; i++) {
             if (markers->markers[i].time_seconds > block_start) {
@@ -274,14 +277,107 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
             block_total = block_end - block_start;
             block_current = current - block_start;
             if (block_current < 0) block_current = 0;
-            // If we've passed the block end, reset to 0 instead of staying at 100%
             if (block_current > block_total) {
                 block_current = 0;
-                block_total = 1.0;  // Reset to show empty bar
+                block_total = 1.0;
+            } else if (total_bytes > 0 && block_total > 0) {
+                // Calculate current bytes based on progress
+                double ratio = block_current / block_total;
+                current_bytes = (size_t)(ratio * total_bytes);
             }
         }
     }
-    draw_left_progress(y, block_current, block_total);
+    
+    // Draw custom progress bar with percentage and byte count
+    int bar_width = SPLIT_COL - 1 - 2 - 24;  // Reserve space for " 100.0% (12345/67890)"
+    if (bar_width < 5) bar_width = 5;
+    
+    double ratio = block_total > 0 ? block_current / block_total : 0;
+    if (ratio > 1.0) ratio = 1.0;
+    if (ratio < 0) ratio = 0;
+    
+    int filled = (int)(ratio * bar_width);
+    if (filled > bar_width) filled = bar_width;
+    
+    tb_set_cell(2, y, '[', TB_WHITE, TB_BLACK);
+    for (int i = 0; i < bar_width; i++) {
+        char ch = ' ';
+        if (i < filled) ch = '=';
+        else if (i == filled) ch = '>';
+        tb_set_cell(3 + i, y, ch, COLOR_PROGRESS, TB_BLACK);
+    }
+    tb_set_cell(3 + bar_width, y, ']', TB_WHITE, TB_BLACK);
+    
+    if (total_bytes > 0) {
+        tb_printf(4 + bar_width, y, TB_WHITE, TB_BLACK, " %.1f%% (%zu/%zu)", 
+                 ratio * 100.0, current_bytes, total_bytes);
+    } else {
+        tb_printf(4 + bar_width, y, TB_WHITE, TB_BLACK, " %.1f%%", ratio * 100.0);
+    }
+    y++;
+
+    // Sync progress bar (tracks current sync/silence operation)
+    draw_left_border(y);
+    print_left(y, 2, "Sync:", COLOR_LABEL);
+    
+    double sync_current = 0.0;
+    double sync_total = 1.0;
+    const char *sync_desc = "(idle)";
+    
+    if (state->current_activity && markers) {
+        const char *desc = state->current_activity->description;
+        // Check if this is a sync/silence activity
+        if (strstr(desc, "Silence") || strstr(desc, "Sync")) {
+            sync_desc = strip_marker_prefix(desc);
+            
+            double sync_start = state->current_activity->time_seconds;
+            double sync_end = sync_start;
+            
+            // Find the next marker to determine when this sync operation ends
+            for (size_t i = 0; i < markers->count; i++) {
+                if (markers->markers[i].time_seconds > sync_start) {
+                    sync_end = markers->markers[i].time_seconds;
+                    break;
+                }
+            }
+            
+            if (sync_end > sync_start) {
+                sync_total = sync_end - sync_start;
+                sync_current = current - sync_start;
+                if (sync_current < 0) sync_current = 0;
+                if (sync_current > sync_total) {
+                    sync_current = 0;
+                    sync_total = 1.0;
+                }
+            }
+        }
+    }
+    
+    print_left(y, 8, sync_desc, COLOR_INFO);
+    y++;
+    
+    // Draw sync progress bar with time instead of percentage
+    draw_left_border(y);
+    int sync_bar_width = SPLIT_COL - 1 - 2 - 24;  // Same as data bar width
+    if (sync_bar_width < 5) sync_bar_width = 5;
+    
+    double sync_ratio = sync_total > 0 ? sync_current / sync_total : 0;
+    if (sync_ratio > 1.0) sync_ratio = 1.0;
+    if (sync_ratio < 0) sync_ratio = 0;
+    
+    int sync_filled = (int)(sync_ratio * sync_bar_width);
+    if (sync_filled > sync_bar_width) sync_filled = sync_bar_width;
+    
+    // Draw the bar
+    tb_set_cell(2, y, '[', TB_WHITE, TB_BLACK);
+    for (int i = 0; i < sync_bar_width; i++) {
+        char ch = ' ';
+        if (i < sync_filled) ch = '=';
+        else if (i == sync_filled) ch = '>';
+        tb_set_cell(3 + i, y, ch, COLOR_PROGRESS, TB_BLACK);
+    }
+    tb_set_cell(3 + sync_bar_width, y, ']', TB_WHITE, TB_BLACK);
+    tb_printf(4 + sync_bar_width, y, TB_WHITE, TB_BLACK, " %.2fs / %.2fs", sync_current, sync_total);
     y++;
 
     // Separator
