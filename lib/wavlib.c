@@ -94,7 +94,7 @@ WavFormat createDefaultWavFormat(void) {
         .sample_rate = 43200,      // Divides evenly into 1200 and 2400 Hz
         .bits_per_sample = 8,      // 8-bit unsigned PCM
         .channels = 1,             // Mono
-        .amplitude = 120           // Safe amplitude (leaves headroom)
+        .amplitude = 127           // Full amplitude to match cas2wav (127.5 rounded down)
     };
     return fmt;
 }
@@ -102,7 +102,7 @@ WavFormat createDefaultWavFormat(void) {
 WaveformConfig createDefaultWaveform(void) {
     WaveformConfig config = {
         .type = WAVE_SINE,
-        .amplitude = 120,
+        .amplitude = 127,
         .baud_rate = 1200,  // Standard MSX baud rate
         .sample_rate = 43200,  // Default MSX sample rate
         .custom_samples = NULL,
@@ -442,15 +442,16 @@ bool closeWavFile(WavWriter *writer) {
     }
     
     // Calculate total file size
-    // 36 = RIFF header (12) + fmt chunk (8 + 16) = 20 + 16
-    // data_size includes the data chunk payload
-    // marker_chunks_size includes cue + adtl chunks
-    uint32_t file_size = 36 + data_size + marker_chunks_size;
+    // RIFF chunk size per spec: file_size - 8 (excludes "RIFF" + size field)
+    // = 4 (WAVE) + 24 (fmt chunk) + 8 (data chunk header) + data_size + markers
+    // = 36 + data_size + marker_chunks_size
+    // This matches cas2wav: RiffSize = size + sizeof(WAVE_HEADER) - 8 = data_size + 44 - 8
+    uint32_t riff_chunk_size = 36 + data_size + marker_chunks_size;
     
     // Update RIFF chunk size (at offset 4)
     fseek(writer->file, 4, SEEK_SET);
     uint8_t buf[4];
-    write_u32_le(buf, file_size);
+    write_u32_le(buf, riff_chunk_size);
     fwrite(buf, 4, 1, writer->file);
     
     // Update data chunk size (at data_chunk_pos)
@@ -597,13 +598,15 @@ bool writePulse(WavWriter *writer, uint16_t frequency, const WaveformConfig *con
     // Generate waveform based on type
     switch (config->type) {
         case WAVE_SINE:
-            // Sine wave: amplitude * sin(2π * t)
+            // Sine wave matching cas2wav implementation:
+            // cas2wav: sin(angle) * 127.5 + 127.5
+            // This gives center=127.5, amplitude=127.5, range [0, 255]
             for (size_t i = 0; i < samples_per_cycle; i++) {
                 double t = (double)i / samples_per_cycle;  // 0.0 to 1.0
                 double phase = 2.0 * M_PI * t;
                 double sample = sin(phase);
-                // Scale to amplitude and offset for unsigned 8-bit (128 = center)
-                buffer[i] = (uint8_t)(128 + config->amplitude * sample);
+                // cas2wav formula: center + amplitude * sin(phase)
+                buffer[i] = (uint8_t)(sample * 127.5 + 127.5);
             }
             break;
             
@@ -977,14 +980,28 @@ bool convertCasToWav(const char *cas_filename, const char *wav_filename,
                        block_idx + 1, file->data_block_count, block->data_size);
             }
             
-            // For custom blocks or subsequent data blocks, use short header
-            // For first data block of non-custom files, use short header too
-            writeSilence(writer, config->short_silence);
-            writeSync(writer, 2000, config);  // Block sync (SHORT_HEADER = 4000 pulses / 2)
+            // Write silence and sync before each data block
+            // Logic matches cas2wav behavior:
+            // - File headers (ASCII/BINARY/BASIC): long_silence (2s) + INITIAL sync (8000) - already written above
+            // - Custom files: cas2wav treats EACH block as separate with long_silence + INITIAL sync
+            // - All other data blocks: short_silence (1s) + SHORT sync (2000)
             
-            // For custom blocks, add the file marker on the first data block
-            if (block_idx == 0 && file->is_custom) {
-                addMarkerIfEnabled(writer, MARKER_STRUCTURE, file_marker);
+            if (file->is_custom) {
+                // Each custom block: cas2wav treats as separate "unknown" file with long header
+                writeSilence(writer, config->long_silence);  // 2s
+                writeSync(writer, 8000, config);  // INITIAL sync
+                if (block_idx == 0) {
+                    addMarkerIfEnabled(writer, MARKER_STRUCTURE, file_marker);  // File marker after sync
+                }
+            } else if (!file->is_custom && block_idx == 0) {
+                // First data block of ASCII/BINARY/BASIC: short_silence (1s) + SHORT sync (2000)
+                // All file types need silence between header and first data block
+                writeSilence(writer, config->short_silence);  // 1s
+                writeSync(writer, 2000, config);  // SHORT sync
+            } else {
+                // Subsequent blocks: short silence + SHORT sync
+                writeSilence(writer, config->short_silence);  // 1s
+                writeSync(writer, 2000, config);  // SHORT sync
             }
             
             addMarkerIfEnabled(writer, MARKER_STRUCTURE, block_marker);

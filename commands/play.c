@@ -58,7 +58,6 @@ static void updateDisplayState(DisplayState *state, const MarkerListInfo *marker
             // File marker: "File 1/3: ..."
             if (strstr(desc, "File ") && strstr(desc, "/") && strstr(desc, ":")) {
                 state->current_file = m;
-                // Don't reset current_block - it stays until we see a data block
             }
             // Data block marker: "Data block 1/1 (256 bytes)"
             else if (strstr(desc, "Data block ")) {
@@ -251,9 +250,6 @@ static void renderDisplay(AudioPlayer *player, DisplayState *state, const Marker
         }
 
         print_left(y, 8, clean_desc, COLOR_VALUE);
-    } else if (state->current_file) {
-        // We have a file but no data block yet - show "loading" state
-        print_left(y, 8, "(loading...)", COLOR_DIM);
     } else {
         print_left(y, 8, "(no data)", COLOR_DIM);
     }
