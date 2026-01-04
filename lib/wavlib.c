@@ -103,7 +103,7 @@ WaveformConfig createDefaultWaveform(void) {
     WaveformConfig config = {
         .type = WAVE_SINE,
         .amplitude = 127,
-        .baud_rate = 1200,  // Standard MSX baud rate
+        .baud_rate = 1200,     // Standard MSX baud rate
         .sample_rate = 43200,  // Default MSX sample rate
         .custom_samples = NULL,
         .custom_length = 0,
@@ -445,7 +445,6 @@ bool closeWavFile(WavWriter *writer) {
     // RIFF chunk size per spec: file_size - 8 (excludes "RIFF" + size field)
     // = 4 (WAVE) + 24 (fmt chunk) + 8 (data chunk header) + data_size + markers
     // = 36 + data_size + marker_chunks_size
-    // This matches cas2wav: RiffSize = size + sizeof(WAVE_HEADER) - 8 = data_size + 44 - 8
     uint32_t riff_chunk_size = 36 + data_size + marker_chunks_size;
     
     // Update RIFF chunk size (at offset 4)
@@ -981,13 +980,12 @@ bool convertCasToWav(const char *cas_filename, const char *wav_filename,
             }
             
             // Write silence and sync before each data block
-            // Logic matches cas2wav behavior:
-            // - File headers (ASCII/BINARY/BASIC): long_silence (2s) + INITIAL sync (8000) - already written above
-            // - Custom files: cas2wav treats EACH block as separate with long_silence + INITIAL sync
-            // - All other data blocks: short_silence (1s) + SHORT sync (2000)
+            // - File headers (ASCII/BINARY/BASIC): long_silence (2s) + INITIAL sync - already written above
+            // - Custom files: each block as separate with long_silence + INITIAL sync
+            // - All other data blocks: short_silence (1s) + SHORT sync
             
             if (file->is_custom) {
-                // Each custom block: cas2wav treats as separate "unknown" file with long header
+                // Each custom block: treat as separate "unknown" file with long header
                 writeSilence(writer, config->long_silence);  // 2s
                 writeSync(writer, 8000, config);  // INITIAL sync
                 if (block_idx == 0) {
